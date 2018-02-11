@@ -2,6 +2,7 @@ use itertools::Itertools;
 
 pub trait Type {
     fn is_polymorphic(&self) -> bool;
+    fn occurs(&self, v: u32) -> bool;
     fn as_arrow(&self) -> Option<&Arrow>;
     /// Supplying is_return helps arrows look cleaner.
     fn show(&self, is_return: bool) -> String;
@@ -14,6 +15,9 @@ pub struct Arrow {
 impl Type for Arrow {
     fn is_polymorphic(&self) -> bool {
         self.arg.is_polymorphic() || self.ret.is_polymorphic()
+    }
+    fn occurs(&self, v: u32) -> bool {
+        self.arg.occurs(v) || self.ret.occurs(v)
     }
     fn as_arrow(&self) -> Option<&Arrow> {
         Some(&self)
@@ -53,6 +57,9 @@ impl Type for Constructed {
     fn is_polymorphic(&self) -> bool {
         self.args.iter().any(|t| t.is_polymorphic())
     }
+    fn occurs(&self, v: u32) -> bool {
+        self.args.iter().any(|t| t.occurs(v))
+    }
     fn as_arrow(&self) -> Option<&Arrow> {
         None
     }
@@ -75,6 +82,9 @@ pub struct Variable {
 impl Type for Variable {
     fn is_polymorphic(&self) -> bool {
         true
+    }
+    fn occurs(&self, v: u32) -> bool {
+        self.number == v
     }
     fn as_arrow(&self) -> Option<&Arrow> {
         None
