@@ -1,11 +1,14 @@
 use itertools::Itertools;
 
+use std::collections::HashMap;
+
 pub trait Type {
     fn is_polymorphic(&self) -> bool;
     fn occurs(&self, v: u32) -> bool;
     fn as_arrow(&self) -> Option<&Arrow>;
     /// Supplying is_return helps arrows look cleaner.
     fn show(&self, is_return: bool) -> String;
+    fn clone_box(&self) -> Box<Type>;
 }
 
 pub struct Arrow {
@@ -28,6 +31,12 @@ impl Type for Arrow {
         } else {
             format!("({} → {})", self.arg.show(false), self.ret.show(true))
         }
+    }
+    fn clone_box(&self) -> Box<Type> {
+        Box::new(Arrow {
+            arg: self.arg.clone_box(),
+            ret: self.ret.clone_box(),
+        })
     }
 }
 impl Arrow {
@@ -74,22 +83,56 @@ impl Type for Constructed {
             )
         }
     }
+    fn clone_box(&self) -> Box<Type> {
+        Box::new(Constructed {
+            name: self.name.clone(),
+            args: self.args.iter().map(|t| t.clone_box()).collect(),
+        })
+    }
 }
 
-pub struct Variable {
-    pub number: u32,
-}
+pub struct Variable(u32);
 impl Type for Variable {
     fn is_polymorphic(&self) -> bool {
         true
     }
     fn occurs(&self, v: u32) -> bool {
-        self.number == v
+        self.0 == v
     }
     fn as_arrow(&self) -> Option<&Arrow> {
         None
     }
     fn show(&self, _is_return: bool) -> String {
-        format!("t{}", self.number)
+        format!("t{}", self.0)
+    }
+    fn clone_box(&self) -> Box<Type> {
+        Box::new(Variable(self.0))
+    }
+}
+
+pub enum UnificationError {
+    Occurs,
+    UnificationFailure(Box<Type>, Box<Type>),
+}
+
+pub struct Context {
+    substitution: HashMap<u32, Box<Type>>,
+    next: u32,
+}
+impl Default for Context {
+    fn default() -> Self {
+        Context {
+            substitution: HashMap::new(),
+            next: 0,
+        }
+    }
+}
+impl Context {
+    pub fn extend(&mut self, v: u32, t: Box<Type>) {
+        self.substitution.insert(v, t);
+    }
+    pub fn new_variable(&mut self) -> Variable {
+        self.next = self.next + 1;
+        Variable(self.next - 1)
     }
 }
