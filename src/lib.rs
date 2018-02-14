@@ -49,7 +49,10 @@ impl Type {
                 Type::Arrow(Arrow::new(arg, ret))
             }
             &Type::Constructed(ref name, ref args) => {
-                let args = args.iter().map(|t| Box::new(t.apply(ctx))).collect();
+                let args = args.iter()
+                    .map(|t| t.apply(ctx))
+                    .map(|t| Box::new(t))
+                    .collect();
                 Type::Constructed(name, args)
             }
             &Type::Variable(v) => {
@@ -58,6 +61,65 @@ impl Type {
                 } else {
                     Type::Variable(v)
                 }
+            }
+        }
+    }
+    pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
+        match self {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+                if !self.is_polymorphic() {
+                    self.clone()
+                } else {
+                    let arg = arg.instantiate(ctx, bindings);
+                    let ret = ret.instantiate(ctx, bindings);
+                    Arrow::new(arg, ret).into()
+                }
+            }
+            &Type::Constructed(name, ref args) => {
+                if !self.is_polymorphic() {
+                    self.clone()
+                } else {
+                    let args = args.iter()
+                        .map(|t| t.instantiate(ctx, bindings))
+                        .map(|t| Box::new(t))
+                        .collect();
+                    Type::Constructed(name, args)
+                }
+            }
+            &Type::Variable(v) => bindings
+                .entry(v)
+                .or_insert_with(|| ctx.new_variable())
+                .clone(),
+        }
+    }
+    pub fn canonical(&self, bindings: &mut HashMap<u32, Type>) -> Type {
+        match self {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+                if !self.is_polymorphic() {
+                    self.clone()
+                } else {
+                    let arg = arg.canonical(bindings);
+                    let ret = ret.canonical(bindings);
+                    Arrow::new(arg, ret).into()
+                }
+            }
+            &Type::Constructed(ref name, ref args) => {
+                if !self.is_polymorphic() {
+                    self.clone()
+                } else {
+                    let args = args.iter()
+                        .map(|t| t.canonical(bindings))
+                        .map(|t| Box::new(t))
+                        .collect();
+                    Type::Constructed(name, args)
+                }
+            }
+            &Type::Variable(v) => {
+                let size = bindings.len() as u32;
+                bindings
+                    .entry(v)
+                    .or_insert_with(|| Type::Variable(size))
+                    .clone()
             }
         }
     }
