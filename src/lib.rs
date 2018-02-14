@@ -4,10 +4,10 @@ use itertools::Itertools;
 
 use std::collections::HashMap;
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Arrow(Arrow),
-    Constructed(String, Vec<Box<Type>>),
+    Constructed(&'static str, Vec<Box<Type>>),
     Variable(u32),
 }
 impl Type {
@@ -31,9 +31,9 @@ impl Type {
     pub fn show(&self, is_return: bool) -> String {
         match self {
             &Type::Arrow(ref arrow) => arrow.show(is_return),
-            &Type::Constructed(ref name, ref args) => {
+            &Type::Constructed(name, ref args) => {
                 if args.is_empty() {
-                    name.clone()
+                    String::from(name)
                 } else {
                     format!("{}({})", name, args.iter().map(|t| t.show(true)).join(","))
                 }
@@ -49,7 +49,6 @@ impl Type {
                 Type::Arrow(Arrow::new(arg, ret))
             }
             &Type::Constructed(ref name, ref args) => {
-                let name = name.clone();
                 let args = args.iter().map(|t| Box::new(t.apply(ctx))).collect();
                 Type::Constructed(name, args)
             }
@@ -69,7 +68,7 @@ impl From<Arrow> for Type {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Arrow {
     arg: Box<Type>,
     ret: Box<Type>,
@@ -105,11 +104,13 @@ impl Arrow {
     }
 }
 
+#[derive(Debug)]
 pub enum UnificationError {
     Occurs,
     Failure(Type, Type),
 }
 
+#[derive(Debug)]
 pub struct Context {
     substitution: HashMap<u32, Type>,
     next: u32,
@@ -175,5 +176,51 @@ impl Context {
             }
             (t1, t2) => Err(UnificationError::Failure(t1, t2)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_unify_one_side_polymorphic() {
+        let mut ctx = Context::default();
+        ctx.unify(
+            Type::Constructed(
+                "list",
+                vec![
+                    Box::new(
+                        Arrow::new(
+                            Type::Constructed("int", vec![]),
+                            Type::Constructed("bool", vec![]),
+                        ).into(),
+                    ),
+                ],
+            ),
+            Type::Constructed("list", vec![Box::new(Type::Variable(0))]),
+        ).expect("one side polymorphic");
+    }
+    #[test]
+    fn test_unify_both_sides_polymorphic() {
+        let mut ctx = Context::default();
+        ctx.unify(
+            Type::Constructed(
+                "list",
+                vec![
+                    Box::new(
+                        Arrow::new(Type::Constructed("int", vec![]), Type::Variable(0)).into(),
+                    ),
+                ],
+            ),
+            Type::Constructed(
+                "list",
+                vec![
+                    Box::new(
+                        Arrow::new(Type::Variable(1), Type::Constructed("bool", vec![])).into(),
+                    ),
+                ],
+            ),
+        ).expect("both sides polymorphic");
+        println!("{:?}", ctx)
     }
 }
