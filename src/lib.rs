@@ -93,35 +93,9 @@ impl Type {
         }
     }
     pub fn canonical(&self, bindings: &mut HashMap<u32, Type>) -> Type {
-        match self {
-            &Type::Arrow(Arrow { ref arg, ref ret }) => {
-                if !self.is_polymorphic() {
-                    self.clone()
-                } else {
-                    let arg = arg.canonical(bindings);
-                    let ret = ret.canonical(bindings);
-                    Arrow::new(arg, ret).into()
-                }
-            }
-            &Type::Constructed(ref name, ref args) => {
-                if !self.is_polymorphic() {
-                    self.clone()
-                } else {
-                    let args = args.iter()
-                        .map(|t| t.canonical(bindings))
-                        .map(|t| Box::new(t))
-                        .collect();
-                    Type::Constructed(name, args)
-                }
-            }
-            &Type::Variable(v) => {
-                let size = bindings.len() as u32;
-                bindings
-                    .entry(v)
-                    .or_insert_with(|| Type::Variable(size))
-                    .clone()
-            }
-        }
+        let mut ctx = Context::default();
+        ctx.next = bindings.len() as u32;
+        self.instantiate(&mut ctx, bindings)
     }
 }
 impl From<Arrow> for Type {
@@ -244,45 +218,109 @@ impl Context {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn find_variables(tp: &Type, o: &mut Vec<u32>) {
+        match tp {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+                find_variables(arg, o);
+                find_variables(ret, o)
+            }
+            &Type::Constructed(_, ref args) => for arg in args {
+                find_variables(arg, o)
+            },
+            &Type::Variable(v) => o.push(v),
+        }
+    }
+    fn variables(tp: &Type) -> Vec<u32> {
+        let mut v = vec![];
+        find_variables(tp, &mut v);
+        v
+    }
+
+    fn tbool() -> Type {
+        Type::Constructed("bool", vec![])
+    }
+    fn tint() -> Type {
+        Type::Constructed("int", vec![])
+    }
+    fn tlist(tp: Type) -> Type {
+        Type::Constructed("list", vec![Box::new(tp)])
+    }
+
     #[test]
     fn test_unify_one_side_polymorphic() {
         let mut ctx = Context::default();
         ctx.unify(
-            Type::Constructed(
-                "list",
-                vec![
-                    Box::new(
-                        Arrow::new(
-                            Type::Constructed("int", vec![]),
-                            Type::Constructed("bool", vec![]),
-                        ).into(),
-                    ),
-                ],
-            ),
-            Type::Constructed("list", vec![Box::new(Type::Variable(0))]),
+            tlist(Arrow::new(tint(), tbool()).into()),
+            tlist(Type::Variable(0)),
         ).expect("one side polymorphic");
+    }
+    #[test]
+    fn test_unify_one_side_polymorphic_fail() {
+        let mut ctx = Context::default();
+        ctx.unify(Arrow::new(tint(), tbool()).into(), tlist(Type::Variable(0)))
+            .expect_err("incompatible types");
     }
     #[test]
     fn test_unify_both_sides_polymorphic() {
         let mut ctx = Context::default();
         ctx.unify(
-            Type::Constructed(
-                "list",
-                vec![
-                    Box::new(
-                        Arrow::new(Type::Constructed("int", vec![]), Type::Variable(0)).into(),
-                    ),
-                ],
-            ),
-            Type::Constructed(
-                "list",
-                vec![
-                    Box::new(
-                        Arrow::new(Type::Variable(1), Type::Constructed("bool", vec![])).into(),
-                    ),
-                ],
-            ),
+            tlist(Arrow::new(tint(), Type::Variable(0)).into()),
+            tlist(Arrow::new(Type::Variable(1), tbool()).into()),
         ).expect("both sides polymorphic");
-        println!("{:?}", ctx)
+    }
+    #[test]
+    fn test_unify_both_sides_polymorphic_occurs() {
+        let mut ctx = Context::default();
+        ctx.unify(
+            tlist(Arrow::new(tint(), Type::Variable(0)).into()),
+            tlist(Arrow::new(Type::Variable(0), tbool()).into()),
+        ).expect_err("incompatible polymorphic types");
+    }
+    #[test]
+    fn test_instantiate() {
+        let mut ctx = Context::default();
+        let mut bindings = HashMap::new();
+        let dummy = Type::Constructed(
+            "dummy",
+            vec![Box::new(tlist(tint())), Box::new(tlist(Type::Variable(3)))],
+        );
+        ctx.unify(Type::Variable(1), dummy.clone())
+            .expect("unify on empty context");
+
+        let t1 = tlist(Arrow::new(tint(), Type::Variable(2)).into())
+            .instantiate(&mut ctx, &mut bindings);
+        let t2 = tlist(Arrow::new(Type::Variable(2), tbool()).into())
+            .instantiate(&mut ctx, &mut bindings);
+        let t3 = tlist(Type::Variable(3)).instantiate(&mut ctx, &mut bindings);
+
+        // type variables start at 0
+        assert_eq!(bindings.get(&2).unwrap(), &Type::Variable(0));
+        assert_eq!(bindings.get(&3).unwrap(), &Type::Variable(1));
+        // like replaces like
+        assert_eq!(variables(&t1), variables(&t2));
+        // substitutions are not made
+        assert_eq!(
+            t3,
+            Type::Constructed("list", vec![Box::new(Type::Variable(1))])
+        );
+        // context is updated
+        assert_eq!(ctx.next, 2);
+        assert_eq!(ctx.substitution.get(&1).unwrap(), &dummy);
+        assert_eq!(ctx.substitution.len(), 1);
+    }
+    #[test]
+    fn test_canonicalize() {
+        let mut bindings = HashMap::new();
+        let t1 = tlist(Arrow::new(tint(), Type::Variable(2)).into()).canonical(&mut bindings);
+        let t2 = tlist(Arrow::new(Type::Variable(2), tbool()).into()).canonical(&mut bindings);
+        let t3 = tlist(Type::Variable(3)).canonical(&mut bindings);
+
+        // type variables start at 0
+        assert_eq!(bindings.get(&2).unwrap(), &Type::Variable(0));
+        assert_eq!(bindings.get(&3).unwrap(), &Type::Variable(1));
+        // like replaces like
+        assert_eq!(variables(&t1), variables(&t2));
+        assert_eq!(t3, tlist(Type::Variable(1)))
     }
 }
