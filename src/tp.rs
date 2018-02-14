@@ -103,7 +103,7 @@ impl Arrow {
 
 pub enum UnificationError {
     Occurs,
-    UnificationFailure(Box<Type>, Type),
+    Failure(Type, Type),
 }
 
 pub struct Context {
@@ -125,5 +125,51 @@ impl Context {
     pub fn new_variable(&mut self) -> Type {
         self.next = self.next + 1;
         Type::Variable(self.next - 1)
+    }
+    pub fn unify(&mut self, t1: Type, t2: Type) -> Result<(), UnificationError> {
+        let t1 = t1.apply(&self);
+        let t2 = t2.apply(&self);
+        if t1 == t2 {
+            return Ok(());
+        }
+        if !t1.is_polymorphic() && !t2.is_polymorphic() {
+            return Err(UnificationError::Failure(t1, t2));
+        }
+        match (t1, t2) {
+            (Type::Variable(v), t2) => {
+                if t2.occurs(v) {
+                    Err(UnificationError::Occurs)
+                } else {
+                    self.extend(v, t2.clone());
+                    Ok(())
+                }
+            }
+            (t1, Type::Variable(v)) => {
+                if t1.occurs(v) {
+                    Err(UnificationError::Occurs)
+                } else {
+                    self.extend(v, t1.clone());
+                    Ok(())
+                }
+            }
+            (Type::Arrow(a1), Type::Arrow(a2)) => {
+                self.unify(*a1.arg, *a2.arg)?;
+                self.unify(*a1.ret, *a2.ret)
+            }
+            (Type::Constructed(n1, a1), Type::Constructed(n2, a2)) => {
+                if n1 != n2 {
+                    Err(UnificationError::Failure(
+                        Type::Constructed(n1, a1),
+                        Type::Constructed(n2, a2),
+                    ))
+                } else {
+                    for (t1, t2) in a1.into_iter().zip(a2) {
+                        self.unify(*t1, *t2)?;
+                    }
+                    Ok(())
+                }
+            }
+            (t1, t2) => Err(UnificationError::Failure(t1, t2)),
+        }
     }
 }
