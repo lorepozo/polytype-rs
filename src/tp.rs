@@ -9,6 +9,8 @@ pub trait Type {
     /// Supplying is_return helps arrows look cleaner.
     fn show(&self, is_return: bool) -> String;
     fn clone_box(&self) -> Box<Type>;
+
+    fn apply(&self, ctx: &Context) -> Box<Type>;
 }
 
 pub struct Arrow {
@@ -33,10 +35,15 @@ impl Type for Arrow {
         }
     }
     fn clone_box(&self) -> Box<Type> {
-        Box::new(Arrow {
-            arg: self.arg.clone_box(),
-            ret: self.ret.clone_box(),
-        })
+        let arg = self.arg.clone_box();
+        let ret = self.ret.clone_box();
+        Box::new(Arrow { arg, ret })
+    }
+
+    fn apply(&self, ctx: &Context) -> Box<Type> {
+        let arg = self.arg.apply(ctx);
+        let ret = self.ret.apply(ctx);
+        Box::new(Arrow { arg, ret })
     }
 }
 impl Arrow {
@@ -84,10 +91,15 @@ impl Type for Constructed {
         }
     }
     fn clone_box(&self) -> Box<Type> {
-        Box::new(Constructed {
-            name: self.name.clone(),
-            args: self.args.iter().map(|t| t.clone_box()).collect(),
-        })
+        let name = self.name.clone();
+        let args = self.args.iter().map(|t| t.clone_box()).collect();
+        Box::new(Constructed { name, args })
+    }
+
+    fn apply(&self, ctx: &Context) -> Box<Type> {
+        let name = self.name.clone();
+        let args = self.args.iter().map(|t| t.apply(ctx)).collect();
+        Box::new(Constructed { name, args })
     }
 }
 
@@ -107,6 +119,14 @@ impl Type for Variable {
     }
     fn clone_box(&self) -> Box<Type> {
         Box::new(Variable(self.0))
+    }
+
+    fn apply(&self, ctx: &Context) -> Box<Type> {
+        if let Some(tp) = ctx.substitution.get(&self.0) {
+            tp.apply(ctx)
+        } else {
+            self.clone_box()
+        }
     }
 }
 
