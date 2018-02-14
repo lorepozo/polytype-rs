@@ -2,30 +2,79 @@ use itertools::Itertools;
 
 use std::collections::HashMap;
 
-pub trait Type {
-    fn is_polymorphic(&self) -> bool;
-    fn occurs(&self, v: u32) -> bool;
-    fn as_arrow(&self) -> Option<&Arrow>;
+#[derive(Clone, PartialEq)]
+pub enum Type {
+    Arrow(Arrow),
+    Constructed(String, Vec<Box<Type>>),
+    Variable(u32),
+}
+impl Type {
+    pub fn is_polymorphic(&self) -> bool {
+        match self {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+                arg.is_polymorphic() || ret.is_polymorphic()
+            }
+            &Type::Constructed(_, ref args) => args.iter().any(|t| t.is_polymorphic()),
+            &Type::Variable(_) => true,
+        }
+    }
+    pub fn occurs(&self, v: u32) -> bool {
+        match self {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => arg.occurs(v) || ret.occurs(v),
+            &Type::Constructed(_, ref args) => args.iter().any(|t| t.occurs(v)),
+            &Type::Variable(n) => n == v,
+        }
+    }
     /// Supplying is_return helps arrows look cleaner.
-    fn show(&self, is_return: bool) -> String;
-    fn clone_box(&self) -> Box<Type>;
-
-    fn apply(&self, ctx: &Context) -> Box<Type>;
+    pub fn show(&self, is_return: bool) -> String {
+        match self {
+            &Type::Arrow(ref arrow) => arrow.show(is_return),
+            &Type::Constructed(ref name, ref args) => {
+                if args.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}({})", name, args.iter().map(|t| t.show(true)).join(","))
+                }
+            }
+            &Type::Variable(v) => format!("t{}", v),
+        }
+    }
+    pub fn apply(&self, ctx: &Context) -> Type {
+        match self {
+            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+                let arg = arg.apply(ctx);
+                let ret = ret.apply(ctx);
+                Type::Arrow(Arrow::new(arg, ret))
+            }
+            &Type::Constructed(ref name, ref args) => {
+                let name = name.clone();
+                let args = args.iter().map(|t| Box::new(t.apply(ctx))).collect();
+                Type::Constructed(name, args)
+            }
+            &Type::Variable(v) => {
+                if let Some(tp) = ctx.substitution.get(&v) {
+                    tp.apply(ctx)
+                } else {
+                    Type::Variable(v)
+                }
+            }
+        }
+    }
 }
 
+#[derive(Clone, PartialEq)]
 pub struct Arrow {
-    pub arg: Box<Type>,
-    pub ret: Box<Type>,
+    arg: Box<Type>,
+    ret: Box<Type>,
 }
-impl Type for Arrow {
-    fn is_polymorphic(&self) -> bool {
-        self.arg.is_polymorphic() || self.ret.is_polymorphic()
+impl Arrow {
+    pub fn new(arg: Type, ret: Type) -> Arrow {
+        let arg = Box::new(arg);
+        let ret = Box::new(ret);
+        Arrow { arg, ret }
     }
-    fn occurs(&self, v: u32) -> bool {
-        self.arg.occurs(v) || self.ret.occurs(v)
-    }
-    fn as_arrow(&self) -> Option<&Arrow> {
-        Some(&self)
+    pub fn as_type(self) -> Type {
+        Type::Arrow(self)
     }
     fn show(&self, is_return: bool) -> String {
         if is_return {
@@ -34,21 +83,8 @@ impl Type for Arrow {
             format!("({} → {})", self.arg.show(false), self.ret.show(true))
         }
     }
-    fn clone_box(&self) -> Box<Type> {
-        let arg = self.arg.clone_box();
-        let ret = self.ret.clone_box();
-        Box::new(Arrow { arg, ret })
-    }
-
-    fn apply(&self, ctx: &Context) -> Box<Type> {
-        let arg = self.arg.apply(ctx);
-        let ret = self.ret.apply(ctx);
-        Box::new(Arrow { arg, ret })
-    }
-}
-impl Arrow {
-    pub fn arg_types(&self) -> Vec<&Box<Type>> {
-        if let Some(arrow) = self.ret.as_arrow() {
+    pub fn arg_types(&self) -> Vec<&Type> {
+        if let Type::Arrow(ref arrow) = *self.ret {
             let mut tps = arrow.arg_types();
             tps.insert(0, &self.arg);
             tps
@@ -56,8 +92,8 @@ impl Arrow {
             vec![&self.arg]
         }
     }
-    pub fn return_type(&self) -> &Box<Type> {
-        if let Some(arrow) = self.ret.as_arrow() {
+    pub fn return_type(&self) -> &Type {
+        if let Type::Arrow(ref arrow) = *self.ret {
             arrow.return_type()
         } else {
             &self.ret
@@ -65,78 +101,13 @@ impl Arrow {
     }
 }
 
-pub struct Constructed {
-    pub name: String,
-    pub args: Vec<Box<Type>>,
-}
-impl Type for Constructed {
-    fn is_polymorphic(&self) -> bool {
-        self.args.iter().any(|t| t.is_polymorphic())
-    }
-    fn occurs(&self, v: u32) -> bool {
-        self.args.iter().any(|t| t.occurs(v))
-    }
-    fn as_arrow(&self) -> Option<&Arrow> {
-        None
-    }
-    fn show(&self, _is_return: bool) -> String {
-        if self.args.is_empty() {
-            self.name.clone()
-        } else {
-            format!(
-                "{}({})",
-                &self.name,
-                self.args.iter().map(|t| t.show(true)).join(",")
-            )
-        }
-    }
-    fn clone_box(&self) -> Box<Type> {
-        let name = self.name.clone();
-        let args = self.args.iter().map(|t| t.clone_box()).collect();
-        Box::new(Constructed { name, args })
-    }
-
-    fn apply(&self, ctx: &Context) -> Box<Type> {
-        let name = self.name.clone();
-        let args = self.args.iter().map(|t| t.apply(ctx)).collect();
-        Box::new(Constructed { name, args })
-    }
-}
-
-pub struct Variable(u32);
-impl Type for Variable {
-    fn is_polymorphic(&self) -> bool {
-        true
-    }
-    fn occurs(&self, v: u32) -> bool {
-        self.0 == v
-    }
-    fn as_arrow(&self) -> Option<&Arrow> {
-        None
-    }
-    fn show(&self, _is_return: bool) -> String {
-        format!("t{}", self.0)
-    }
-    fn clone_box(&self) -> Box<Type> {
-        Box::new(Variable(self.0))
-    }
-
-    fn apply(&self, ctx: &Context) -> Box<Type> {
-        if let Some(tp) = ctx.substitution.get(&self.0) {
-            tp.apply(ctx)
-        } else {
-            self.clone_box()
-        }
-    }
-}
-
 pub enum UnificationError {
     Occurs,
-    UnificationFailure(Box<Type>, Box<Type>),
+    UnificationFailure(Box<Type>, Type),
 }
 
 pub struct Context {
-    substitution: HashMap<u32, Box<Type>>,
+    substitution: HashMap<u32, Type>,
     next: u32,
 }
 impl Default for Context {
@@ -148,11 +119,11 @@ impl Default for Context {
     }
 }
 impl Context {
-    pub fn extend(&mut self, v: u32, t: Box<Type>) {
+    pub fn extend(&mut self, v: u32, t: Type) {
         self.substitution.insert(v, t);
     }
-    pub fn new_variable(&mut self) -> Variable {
+    pub fn new_variable(&mut self) -> Type {
         self.next = self.next + 1;
-        Variable(self.next - 1)
+        Type::Variable(self.next - 1)
     }
 }
