@@ -43,6 +43,14 @@ fn test_arrow_macro() {
     );
 }
 #[test]
+fn test_tp_macro() {
+    tp!(bool);
+    tp!(list(tp!(bool)));
+    tp!(list(tp!(tuple(tp!(bool), tp!(int)))));
+    tp!(0);
+    tp!(hashmap(tp!(str), arrow![tp!(int), tp!(0), tp!(bool)]));
+}
+#[test]
 fn test_arrow_methods() {
     let t0 = Type::Variable(0);
     let t1 = Type::Constructed("int", vec![]);

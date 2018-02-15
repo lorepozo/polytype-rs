@@ -1,77 +1,56 @@
 //! A Hindley-Milner polymorphic typing system.
 //!
+//! For brevity, the documentation heavily uses the two provided macros when creating types.
+//!
 //! # Examples
 //!
 //! The basics:
 //!
 //! ```
-//! // filter: (α → bool) → [α] → [α]
 //! # #[macro_use] extern crate polytype;
-//! use polytype::{Context, Type};
+//! use polytype::Context;
 //!
 //! # fn main() {
-//! let t0 = Type::Variable(0);
-//! let tbool = Type::Constructed("bool", vec![]);
-//! fn tlist(tp: Type) -> Type {
-//!     Type::Constructed("list", vec![Box::new(tp)])
-//! }
-//!
-//! // the filter type
+//! // filter: (α → bool) → [α] → [α]
 //! let t = arrow![
-//!     arrow![t0.clone(), tbool],
-//!     tlist(t0.clone()),
-//!     tlist(t0.clone()),
+//!     arrow![tp!(0), tp!(bool)],
+//!     tp!(list(tp!(0))),
+//!     tp!(list(tp!(0))),
 //! ];
 //!
 //! assert!(t.is_polymorphic());
-//! assert_eq!(format!("{}", &t),
-//!            "(t0 → bool) → list(t0) → list(t0)");
+//! assert_eq!(format!("{}", &t), "(t0 → bool) → list(t0) → list(t0)");
 //!
-//! // we can substitute t0 using a type context:
+//! // we can substitute t0 with unification in a type context:
 //! let mut ctx = Context::default();
-//!
-//! let tint = Type::Constructed("int", vec![]);
-//! ctx.unify(&t0, &tint).expect("unifies");
+//! ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
 //!
 //! let t = t.apply(&ctx);
 //! assert!(!t.is_polymorphic());
-//! assert_eq!(format!("{}", &t),
-//!            "(int → bool) → list(int) → list(int)");
+//! assert_eq!(format!("{}", &t), "(int → bool) → list(int) → list(int)");
 //! # }
 //! ```
 //!
 //! More about instantiation, and unification:
 //!
 //! ```
-//! // reduce: (β → α → β) → β → [α] → β
 //! # #[macro_use] extern crate polytype;
-//! use polytype::{Context, Type};
+//! use polytype::Context;
 //!
 //! # fn main() {
-//! let t0 = Type::Variable(0);
-//! let t1 = Type::Variable(1);
-//! fn tlist(tp: Type) -> Type {
-//!     Type::Constructed("list", vec![Box::new(tp)])
-//! }
-//!
-//! // the reduce type
+//! // reduce: (β → α → β) → β → [α] → β
 //! let t = arrow![
-//!     arrow![
-//!         t1.clone(),
-//!         t0.clone(),
-//!         t1.clone(),
-//!     ],
-//!     t1.clone(),
-//!     tlist(t0.clone()),
-//!     t1.clone(),
+//!     arrow![tp!(1), tp!(0), tp!(1)],
+//!     tp!(1),
+//!     tp!(list(tp!(0))),
+//!     tp!(1),
 //! ];
 //!
 //! assert!(t.is_polymorphic());
-//! assert_eq!(format!("{}", &t),
-//!            "(t1 → t0 → t1) → t1 → list(t0) → t1");
+//! assert_eq!(format!("{}", &t), "(t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
-//! let tint = Type::Constructed("int", vec![]);
-//! let tplus = arrow![tint.clone(), tint.clone(), tint.clone()];  // e.g. add two ints
+//! // lets consider reduce when applied to a function that adds two ints
+//! let tplus = arrow![tp!(int), tp!(int), tp!(int)];
 //! assert_eq!(format!("{}", &tplus), "int → int → int");
 //!
 //! // instantiate polymorphic types within our context so new type variables will be distinct
@@ -84,17 +63,16 @@
 //!     &t,
 //!     &arrow![
 //!         tplus.clone(),
-//!         tint.clone(),
-//!         tlist(tint.clone()),
+//!         tp!(int),
+//!         tp!(list(tp!(int))),
 //!         treturn.clone(),
 //!     ],
 //! ).expect("unifies");
-//! assert_eq!(treturn.apply(&ctx), tint.clone());  // inferred return: int
+//! assert_eq!(treturn.apply(&ctx), tp!(int));  // inferred return: int
 //!
 //! // now that unification has happened with ctx, we can see what form reduce takes
 //! let t = t.apply(&ctx);
-//! assert_eq!(format!("{}", t),
-//!            "(int → int → int) → int → list(int) → int");
+//! assert_eq!(format!("{}", t), "(int → int → int) → int → list(int) → int");
 //! # }
 //! ```
 extern crate itertools;
@@ -116,24 +94,16 @@ pub enum Type {
     /// ```
     /// # use polytype::{Arrow, Type};
     /// let t = Type::Arrow(Arrow::new(Type::Variable(0), Type::Variable(1)));
-    /// assert_eq!(format!("{}", &t),
-    ///            "t0 → t1");
+    /// assert_eq!(format!("{}", &t), "t0 → t1");
     /// ```
     ///
-    /// With `arrow!` macro:
+    /// With the macros:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
-    /// # use polytype::Type;
     /// # fn main() {
-    /// let t = arrow![
-    ///     Type::Variable(0),
-    ///     Type::Variable(1),
-    ///     Type::Variable(2),
-    ///     Type::Variable(3),
-    /// ];
-    /// assert_eq!(format!("{}", &t),
-    ///            "t0 → t1 → t2 → t3");
+    /// let t = arrow![tp!(0), tp!(1), tp!(int), tp!(bool)];
+    /// assert_eq!(format!("{}", &t), "t0 → t1 → int → bool");
     /// # }
     /// ```
     Arrow(Arrow),
@@ -155,22 +125,17 @@ pub enum Type {
     /// # use polytype::Type;
     /// let tint = Type::Constructed("int", vec![]);
     /// let tlist_of_ints = Type::Constructed("list", vec![Box::new(tint)]);
-    /// assert_eq!(format!("{}", &tlist_of_ints),
-    ///            "list(int)");
+    /// assert_eq!(format!("{}", &tlist_of_ints), "list(int)");
     /// ```
     ///
-    /// Composites may often warrant writing shorthand with a dedicated function:
+    /// With the macros:
     ///
     /// ```
-    /// # use polytype::Type;
-    /// fn tlist(tp: Type) -> Type {
-    ///     Type::Constructed("list", vec![Box::new(tp)])
-    /// }
-    ///
-    /// let tint = Type::Constructed("int", vec![]);
-    /// let tlist_of_ints = tlist(tint);
-    /// assert_eq!(format!("{}", &tlist_of_ints),
-    ///            "list(int)");
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = tp!(list(tp!(int)));
+    /// assert_eq!(format!("{}", &t), "list(int)");
+    /// # }
     /// ```
     Constructed(&'static str, Vec<Box<Type>>),
     /// For type variables.
@@ -179,23 +144,26 @@ pub enum Type {
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
     /// # use polytype::Type;
+    /// // any function: α → β
+    /// let t = arrow![Type::Variable(0), Type::Variable(1)];
+    /// assert_eq!(format!("{}", &t), "t0 → t1");
+    /// # }
+    /// ```
+    ///
+    /// With the macros:
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// // map: (α → β) → [α] → [β]
-    /// let t0 = Type::Variable(0);
-    /// let t1 = Type::Variable(1);
-    /// fn tlist(tp: Type) -> Type {
-    ///     Type::Constructed("list", vec![Box::new(tp)])
-    /// }
-    ///
-    /// // the map type
     /// let t = arrow![
-    ///     arrow![t0.clone(), t1.clone()],
-    ///     tlist(t0.clone()),
-    ///     tlist(t1.clone()),
+    ///     arrow![tp!(0), tp!(1)],
+    ///     tp!(list(tp!(0))),
+    ///     tp!(list(tp!(1))),
     /// ];
-    /// assert_eq!(format!("{}", &t),
-    ///            "(t0 → t1) → list(t0) → list(t1)");
+    /// assert_eq!(format!("{}", &t), "(t0 → t1) → list(t0) → list(t1)");
     /// # }
     /// ```
     Variable(u32),
@@ -239,14 +207,17 @@ impl Type {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{Context, Type};
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::Context;
     /// let mut ctx = Context::default();
-    /// ctx.unify(&Type::Variable(0), &Type::Constructed("int", vec![])).expect("unifies");
+    /// ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
     ///
-    /// let t = Type::Constructed("list", vec![Box::new(Type::Variable(0))]);
+    /// let t = tp!(list(tp!(0)));
     /// assert_eq!(format!("{}", &t), "list(t0)");
     /// let t = t.apply(&ctx);
     /// assert_eq!(format!("{}", &t), "list(int)");
+    /// # }
     /// ```
     pub fn apply(&self, ctx: &Context) -> Type {
         match self {
@@ -279,16 +250,19 @@ impl Type {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{Context, Type};
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::Context;
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
-    /// let t2 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
+    /// let t1 = tp!(list(tp!(3)));
+    /// let t2 = tp!(list(tp!(3)));
     ///
     /// let t1 = t1.instantiate_indep(&mut ctx);
     /// let t2 = t2.instantiate_indep(&mut ctx);
     /// assert_eq!(format!("{}", &t1), "list(t0)");
     /// assert_eq!(format!("{}", &t2), "list(t1)");
+    /// # }
     /// ```
     ///
     /// [`Type::instantiate`]: #method.instantiate
@@ -304,19 +278,22 @@ impl Type {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{Context, Type};
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::Context;
     /// use std::collections::HashMap;
     ///
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
-    /// let t2 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
+    /// let t1 = tp!(list(tp!(3)));
+    /// let t2 = tp!(list(tp!(3)));
     ///
     /// let mut bindings = HashMap::new();
     /// let t1 = t1.instantiate(&mut ctx, &mut bindings);
     /// let t2 = t2.instantiate(&mut ctx, &mut bindings);
     /// assert_eq!(format!("{}", &t1), "list(t0)");
     /// assert_eq!(format!("{}", &t2), "list(t0)");
+    /// # }
     /// ```
     pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
         match self {
@@ -366,25 +343,38 @@ impl From<Arrow> for Type {
     }
 }
 
-/// An arrow (function), curried.
+/// A curried function.
 ///
 /// # Examples
 ///
 /// ```
 /// use polytype::{Type, Arrow};
 ///
-/// let arrow = Arrow::new(
-///     Type::Variable(0),
-///     Arrow::new(
-///         Type::Variable(1),
-///         Type::Variable(2),
-///     ).into(),
-/// );
+/// let func = Arrow{
+///     arg: Box::new(Type::Variable(0)),
+///     ret: Box::new(Type::Arrow(Arrow{
+///         arg: Box::new(Type::Variable(1)),
+///         ret: Box::new(Type::Variable(2)),
+///     })),
+/// };
 ///
-/// assert_eq!(Vec::from(arrow.args()),
-///            vec![&Type::Variable(0), &Type::Variable(1)]);
-/// assert_eq!(arrow.returns(),
-///            &Type::Variable(2));
+/// assert_eq!(Vec::from(func.args()), vec![&Type::Variable(0), &Type::Variable(1)]);
+/// assert_eq!(func.returns(), &Type::Variable(2));
+/// ```
+///
+/// With the macros:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # fn main() {
+/// # use polytype::Type;
+/// let func = arrow![tp!(0), tp!(1), tp!(2)];
+///
+/// if let Type::Arrow(arr) = func {
+///     assert_eq!(Vec::from(arr.args()), vec![&tp!(0), &tp!(1)]);
+///     assert_eq!(arr.returns(), &tp!(2));
+/// } else { unreachable!() } // we know func is an arrow
+/// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Arrow {
@@ -487,14 +477,11 @@ impl Context {
     /// ```
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
-    /// # use polytype::{Arrow, Context, Type};
+    /// # use polytype::Context;
     /// let mut ctx = Context::default();
     ///
-    /// let tbool = Type::Constructed("bool", vec![]);
-    /// let tint = Type::Constructed("int", vec![]);
-    ///
-    /// let t1 = arrow![tint, Type::Variable(0)];
-    /// let t2 = arrow![Type::Variable(1), tbool];
+    /// let t1 = arrow![tp!(int), tp!(0)];
+    /// let t2 = arrow![tp!(1), tp!(bool)];
     /// ctx.unify(&t1, &t2).expect("unifies");
     ///
     /// let t1 = t1.apply(&ctx);
@@ -509,37 +496,33 @@ impl Context {
     /// ```
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
-    /// # use polytype::{Arrow, Context, Type, UnificationError};
+    /// # use polytype::{Context, UnificationError};
     /// let mut ctx = Context::default();
     ///
-    /// let tbool = Type::Constructed("bool", vec![]);
-    /// let tint = Type::Constructed("int", vec![]);
-    ///
-    /// let t1 = arrow![tint.clone(), Type::Variable(0)];
-    /// let t2 = arrow![tbool.clone(), Type::Variable(1)];
+    /// let t1 = arrow![tp!(int), tp!(0)];
+    /// let t2 = arrow![tp!(bool), tp!(1)];
     /// let res = ctx.unify(&t1, &t2);
     ///
     /// if let Err(UnificationError::Failure(left, right)) = res {
     ///     // failed to unify t1 with t2.
-    ///     assert_eq!(left, tint);
-    ///     assert_eq!(right, tbool);
+    ///     assert_eq!(left, tp!(int));
+    ///     assert_eq!(right, tp!(bool));
     /// } else { unreachable!() }
     /// # }
     /// ```
     ///
     /// An [`UnificationError::Occurs`] error happens when the same type variable occurs in both
-    /// types in a circular way:
+    /// types in a circular way. Ensure you [`instantiate`][] (or [`instantiate_indep`]) your types
+    /// properly, so type variables don't overlap unless you mean them to.
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
-    /// # use polytype::{Arrow, Context, Type, UnificationError};
+    /// # use polytype::{Context, UnificationError};
     /// let mut ctx = Context::default();
     ///
-    /// let tbool = Type::Constructed("bool", vec![]);
-    ///
-    /// let t1 = Type::Variable(1);
-    /// let t2 = arrow![tbool, Type::Variable(1)];
+    /// let t1 = tp!(1);
+    /// let t2 = arrow![tp!(bool), tp!(1)];
     /// let res = ctx.unify(&t1, &t2);
     ///
     /// if let Err(UnificationError::Occurs(v)) = res {
@@ -552,6 +535,8 @@ impl Context {
     ///
     /// [`UnificationError::Failure`]: enum.UnificationError.html#variant.Failure
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
+    /// [`instantiate`]: enum.Type.html#method.instantiate
+    /// [`instantiate_indep`]: enum.Type.html#method.instantiate_indep
     pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
         let mut ctx = self.clone();
         ctx.unify_internal(t1, t2)?;
@@ -608,7 +593,7 @@ impl Context {
     }
 }
 
-/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenice for nested arrows).
+/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenience for nested arrows).
 ///
 /// This is equivalent to:
 ///
@@ -629,12 +614,20 @@ impl Context {
 ///
 /// ```
 /// #[macro_use] extern crate polytype;
-/// use polytype::Type;
-/// # fn main() {
+/// use polytype::{Arrow, Type};
 ///
+/// # fn main() {
 /// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
-/// assert_eq!(format!("{}", t),
-///            "t0 → t1 → t2");
+/// assert_eq!(format!("{}", t), "t0 → t1 → t2");
+/// // equivalent to:
+/// let t_eq = Type::Arrow(Arrow{
+///     arg: Box::new(Type::Variable(0)),
+///     ret: Box::new(Type::Arrow(Arrow{
+///         arg: Box::new(Type::Variable(1)),
+///         ret: Box::new(Type::Variable(2)),
+///     })),
+/// });
+/// assert_eq!(t, t_eq);
 /// # }
 /// ```
 ///
@@ -648,4 +641,94 @@ macro_rules! arrow {
     [$x:expr, $($xs:expr,)*] => (
         arrow![$x, $($xs),*]
     )
+}
+
+/// Creates a [`Type::Constructed`] or [`Type::Variable`][] (convenience for common pattern).
+///
+/// ```rust,ignore
+/// // equivalent to:
+/// Type::Constructed(ident, vec![
+///     Box::new(tp1),
+///     Box::new(tp2),
+///     ...
+/// ])
+/// // or
+/// Type::Variable(n)
+/// ```
+///
+/// # Examples
+///
+/// Make a primitive type:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::Type;
+/// # fn main() {
+/// let t = tp!(int);
+/// assert_eq!(format!("{}", t), "int");
+/// // equivalent to:
+/// let t_eq = Type::Constructed("int", vec![]);
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// Make a variable type:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::Type;
+/// # fn main() {
+/// let t = tp!(0);
+/// assert_eq!(format!("{}", t), "t0");
+/// // equivalent to:
+/// let t_eq = Type::Variable(0);
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// Make a composite type:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::Type;
+/// # fn main() {
+/// let tint = tp!(int);
+/// let tstr = tp!(str);
+/// let t = tp!(dict(tstr, tint));
+/// assert_eq!(format!("{}", t), "dict(str,int)");
+/// // equivalent to:
+/// let t_eq = Type::Constructed("dict", vec![
+///     Box::new(Type::Constructed("str", vec![])),
+///     Box::new(Type::Constructed("int", vec![])),
+/// ]);
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// Nest them for more complex types:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::Type;
+/// # fn main() {
+/// // mapi: (int → α → β) → [α] → [β]
+/// let t = arrow![
+///     arrow![tp!(int), tp!(0), tp!(1)],
+///     tp!(list(tp!(0))),
+///     tp!(list(tp!(1))),
+/// ];
+/// assert_eq!(format!("{}", t), "(int → t0 → t1) → list(t0) → list(t1)");
+/// # }
+/// ```
+///
+/// [`Type::Constructed`]: enum.Type.html#variant.Constructed
+/// [`Type::Variable`]: enum.Type.html#variant.Variable
+#[macro_export]
+macro_rules! tp {
+    ($n:ident) => ($crate::Type::Constructed(stringify!($n), Vec::new()));
+    ($n:ident($($x:expr),*)) => {
+        $crate::Type::Constructed(stringify!($n), vec![$(Box::new($x)),*])
+    };
+    ($n:ident($($x:expr,)*)) => (tp!($n($($x),*)));
+    ($n:expr) => ($crate::Type::Variable($n));
 }
