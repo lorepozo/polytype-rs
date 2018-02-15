@@ -17,22 +17,17 @@ polytype = "1.2"
 Provided by **`polytype`** are the
 [`Type`](https://docs.rs/polytype/1.2.0/polytype/enum.Type.html) enum and
 the [`Context`](https://docs.rs/polytype/1.2.0/polytype/struct.Context.html)
-struct.
+struct, and the macros `tp!` and `arrow!` which help to concisely create
+types.
 
 Unification:
 
 ```rust
 let mut ctx = Context::default();
 
-let tbool = Type::Constructed("bool", vec![]);
-let tint = Type::Constructed("int", vec![]);
-fn tlist(tp: Type) -> Type {
-    Type::Constructed("list", vec![Box::new(tp)])
-}
-
 // t1: list(int → α) ; t2: list(β → bool)
-let t1 = tlist(Type::Arrow(Arrow::new(tint, Type::Variable(0))));
-let t2 = tlist(Type::Arrow(Arrow::new(Type::Variable(1), tbool)));
+let t1 = tp!(list(arrow![tp!(int), tp!(0)]));
+let t2 = tp!(list(arrow![tp!(1), tp!(bool)]));
 ctx.unify(&t1, &t2).expect("unifies");
 
 let t1 = t1.apply(&ctx);
@@ -45,9 +40,9 @@ Apply a type context:
 ```rust
 let mut ctx = Context::default();
 // assign t0 to int
-ctx.unify(&Type::Variable(0), &Type::Constructed("int", vec![])).expect("unifies");
+ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
 
-let t = Type::Constructed("list", vec![Box::new(Type::Variable(0))]);
+let t = tp!(list(tp!(0)));
 assert_eq!(format!("{}", &t), "list(t0)");
 let t = t.apply(&ctx);
 assert_eq!(format!("{}", &t), "list(int)");
@@ -58,8 +53,8 @@ Independent instantiation:
 ```rust
 let mut ctx = Context::default();
 
-let t1 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
-let t2 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
+let t1 = tp!(list(tp!(3)));
+let t2 = tp!(list(tp!(3)));
 
 let t1 = t1.instantiate_indep(&mut ctx);
 let t2 = t2.instantiate_indep(&mut ctx);
@@ -74,8 +69,8 @@ use std::collections::HashMap;
 
 let mut ctx = Context::default();
 
-let t1 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
-let t2 = Type::Constructed("list", vec![Box::new(Type::Variable(3))]);
+let t1 = tp!(list(tp!(3)));
+let t2 = tp!(list(tp!(3)));
 
 let mut bindings = HashMap::new();
 let t1 = t1.instantiate(&mut ctx, &mut bindings);
