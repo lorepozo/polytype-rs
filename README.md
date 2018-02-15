@@ -1,6 +1,6 @@
 # polytype
 
-[![Build Status](https://travis-ci.org/lucasem/polytype.svg?branch=master)](https://travis-ci.org/lucasem/polytype)
+[![Build Status](https://travis-ci.org/lucasem/polytype-rs.svg?branch=master)](https://travis-ci.org/lucasem/polytype-rs)
 [![crates.io](https://img.shields.io/crates/v/polytype.svg)](https://crates.io/crates/polytype)
 [![docs.rs](https://docs.rs/polytype/badge.svg)](https://docs.rs/polytype)
 
