@@ -426,52 +426,25 @@ impl Arrow {
     }
 }
 
-/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenice for nested arrows).
-///
-/// This is equivalent to:
-///
-/// ```rust,ignore
-/// Type::Arrow(Arrow::new(
-///     tp0,
-///     Arrow::new(
-///         tp1,
-///         Arrow::new(
-///             tp2,
-///             ...
-///         ).into(),
-///     ).into(),
-/// ))
-/// ```
-///
-/// # Examples
-///
-/// ```
-/// #[macro_use] extern crate polytype;
-/// use polytype::Type;
-/// # fn main() {
-///
-/// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
-/// assert_eq!(format!("{}", t),
-///            "t0 → t1 → t2");
-/// # }
-/// ```
-///
-/// [`Type::Arrow`]: enum.Type.html#variant.Arrow
-#[macro_export]
-macro_rules! arrow {
-    [$x:expr] => ($x);
-    [$x:expr, $($xs:expr),*] => (
-        $crate::Type::Arrow($crate::Arrow::new($x, arrow!($($xs),+)))
-    );
-    [$x:expr, $($xs:expr,)*] => (
-        arrow![$x, $($xs),*]
-    )
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnificationError {
     Occurs,
     Failure(Type, Type),
+}
+impl fmt::Display for UnificationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            &UnificationError::Occurs => write!(f, "Occurs"),
+            &UnificationError::Failure(ref t1, ref t2) => {
+                write!(f, "Failure({}, {})", t1.show(false), t2.show(false))
+            }
+        }
+    }
+}
+impl std::error::Error for UnificationError {
+    fn description(&self) -> &str {
+        "could not unify"
+    }
 }
 
 /// Context is a type environment, keeping track of substitutions and type variables. Useful for
@@ -577,6 +550,48 @@ impl Context {
             (t1, t2) => Err(UnificationError::Failure(t1, t2)),
         }
     }
+}
+
+/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenice for nested arrows).
+///
+/// This is equivalent to:
+///
+/// ```rust,ignore
+/// Type::Arrow(Arrow::new(
+///     tp0,
+///     Arrow::new(
+///         tp1,
+///         Arrow::new(
+///             tp2,
+///             ...
+///         ).into(),
+///     ).into(),
+/// ))
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// #[macro_use] extern crate polytype;
+/// use polytype::Type;
+/// # fn main() {
+///
+/// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
+/// assert_eq!(format!("{}", t),
+///            "t0 → t1 → t2");
+/// # }
+/// ```
+///
+/// [`Type::Arrow`]: enum.Type.html#variant.Arrow
+#[macro_export]
+macro_rules! arrow {
+    [$x:expr] => ($x);
+    [$x:expr, $($xs:expr),*] => (
+        $crate::Type::Arrow($crate::Arrow::new($x, arrow!($($xs),+)))
+    );
+    [$x:expr, $($xs:expr,)*] => (
+        arrow![$x, $($xs),*]
+    )
 }
 
 #[cfg(test)]
