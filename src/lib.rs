@@ -482,24 +482,81 @@ impl Context {
     /// # Examples
     ///
     /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
     /// # use polytype::{Arrow, Context, Type};
     /// let mut ctx = Context::default();
     ///
     /// let tbool = Type::Constructed("bool", vec![]);
     /// let tint = Type::Constructed("int", vec![]);
-    /// fn tlist(tp: Type) -> Type {
-    ///     Type::Constructed("list", vec![Box::new(tp)])
-    /// }
     ///
-    /// let t1 = tlist(Type::from(Arrow::new(tint, Type::Variable(0))));
-    /// let t2 = tlist(Type::from(Arrow::new(Type::Variable(1), tbool)));
+    /// let t1 = arrow![tint, Type::Variable(0)];
+    /// let t2 = arrow![Type::Variable(1), tbool];
     /// ctx.unify(&t1, &t2).expect("unifies");
     ///
     /// let t1 = t1.apply(&ctx);
     /// let t2 = t2.apply(&ctx);
     /// assert_eq!(t1, t2);
+    /// # }
     /// ```
+    ///
+    /// Unification errors leave the context unaffected. A [`UnificationError::Failure`] error
+    /// happens when symbols don't match:
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::{Arrow, Context, Type, UnificationError};
+    /// let mut ctx = Context::default();
+    ///
+    /// let tbool = Type::Constructed("bool", vec![]);
+    /// let tint = Type::Constructed("int", vec![]);
+    ///
+    /// let t1 = arrow![tint.clone(), Type::Variable(0)];
+    /// let t2 = arrow![tbool.clone(), Type::Variable(1)];
+    /// let res = ctx.unify(&t1, &t2);
+    ///
+    /// if let Err(UnificationError::Failure(left, right)) = res {
+    ///     // failed to unify t1 with t2.
+    ///     assert_eq!(left, tint);
+    ///     assert_eq!(right, tbool);
+    /// } else { unreachable!() }
+    /// # }
+    /// ```
+    ///
+    /// An [`UnificationError::Occurs`] error happens when the same type variable occurs in both
+    /// types in a circular way:
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::{Arrow, Context, Type, UnificationError};
+    /// let mut ctx = Context::default();
+    ///
+    /// let tbool = Type::Constructed("bool", vec![]);
+    ///
+    /// let t1 = Type::Variable(1);
+    /// let t2 = arrow![tbool, Type::Variable(1)];
+    /// let res = ctx.unify(&t1, &t2);
+    ///
+    /// if let Err(UnificationError::Occurs) = res {
+    ///     // failed to unify t1 with t2 because of circular type variable occurrence.
+    ///     // t1 would have to be bool -> bool -> ... ad infinitum.
+    /// } else { unreachable!() }
+    /// # }
+    /// ```
+    ///
+    /// [`UnificationError::Failure`]: enum.UnificationError.html#variant.Failure
+    /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+        let mut ctx = self.clone();
+        ctx.unify_internal(t1, t2)?;
+        *self = ctx;
+        Ok(())
+    }
+    /// unify_internal may mutate the context even with an error.
+    /// The context on which it's called should be discarded if there's an error.
+    fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
         let t1 = t1.apply(&self);
         let t2 = t2.apply(&self);
         if t1 == t2 {
@@ -526,11 +583,8 @@ impl Context {
                 }
             }
             (Type::Arrow(a1), Type::Arrow(a2)) => {
-                let mut new_ctx = self.clone();
-                new_ctx.unify(&a1.arg, &a2.arg)?;
-                new_ctx.unify(&a1.ret, &a2.ret)?;
-                *self = new_ctx;
-                Ok(())
+                self.unify_internal(&a1.arg, &a2.arg)?;
+                self.unify_internal(&a1.ret, &a2.ret)
             }
             (Type::Constructed(n1, a1), Type::Constructed(n2, a2)) => {
                 if n1 != n2 {
@@ -539,11 +593,9 @@ impl Context {
                         Type::Constructed(n2, a2),
                     ))
                 } else {
-                    let mut new_ctx = self.clone();
                     for (t1, t2) in a1.into_iter().zip(a2) {
-                        new_ctx.unify(&t1, &t2)?;
+                        self.unify_internal(&t1, &t2)?;
                     }
-                    *self = new_ctx;
                     Ok(())
                 }
             }
