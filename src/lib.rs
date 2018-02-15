@@ -428,13 +428,16 @@ impl Arrow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnificationError {
-    Occurs,
+    /// `Occurs` is the error when the same type variable occurs in both types in a circular way.
+    /// The number of the circular type variable is supplied.
+    Occurs(u32),
+    /// `Failure` happens when symbols or type variants don't match.
     Failure(Type, Type),
 }
 impl fmt::Display for UnificationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            &UnificationError::Occurs => write!(f, "Occurs"),
+            &UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
             &UnificationError::Failure(ref t1, ref t2) => {
                 write!(f, "Failure({}, {})", t1.show(false), t2.show(false))
             }
@@ -539,9 +542,10 @@ impl Context {
     /// let t2 = arrow![tbool, Type::Variable(1)];
     /// let res = ctx.unify(&t1, &t2);
     ///
-    /// if let Err(UnificationError::Occurs) = res {
+    /// if let Err(UnificationError::Occurs(v)) = res {
     ///     // failed to unify t1 with t2 because of circular type variable occurrence.
     ///     // t1 would have to be bool -> bool -> ... ad infinitum.
+    ///     assert_eq!(v, 1);
     /// } else { unreachable!() }
     /// # }
     /// ```
@@ -568,7 +572,7 @@ impl Context {
         match (t1, t2) {
             (Type::Variable(v), t2) => {
                 if t2.occurs(v) {
-                    Err(UnificationError::Occurs)
+                    Err(UnificationError::Occurs(v))
                 } else {
                     self.extend(v, t2.clone());
                     Ok(())
@@ -576,7 +580,7 @@ impl Context {
             }
             (t1, Type::Variable(v)) => {
                 if t1.occurs(v) {
-                    Err(UnificationError::Occurs)
+                    Err(UnificationError::Occurs(v))
                 } else {
                     self.extend(v, t1.clone());
                     Ok(())
