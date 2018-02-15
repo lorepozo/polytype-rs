@@ -15,8 +15,8 @@ polytype = "1.2"
 ```
 
 Provided by **`polytype`** are the
-[`Type`](https://docs.rs/polytype/1.2.0/polytype/enum.Type.html) enum and
-the [`Context`](https://docs.rs/polytype/1.2.0/polytype/struct.Context.html)
+[`Type`](https://docs.rs/polytype/1.2.1/polytype/enum.Type.html) enum and
+the [`Context`](https://docs.rs/polytype/1.2.1/polytype/struct.Context.html)
 struct, and the macros `tp!` and `arrow!` which help to concisely create
 types.
 
