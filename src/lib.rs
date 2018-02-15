@@ -97,7 +97,10 @@ pub enum Type {
     ///
     /// ```
     /// # use polytype::{Arrow, Type};
-    /// let t = Type::Arrow(Arrow::new(Type::Variable(0), Type::Variable(1)));
+    /// let t = Type::Arrow(Arrow {
+    ///     arg: Box::new(Type::Variable(0)),
+    ///     ret: Box::new(Type::Variable(1)),
+    /// });
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     /// ```
     ///
@@ -226,9 +229,9 @@ impl Type {
     pub fn apply(&self, ctx: &Context) -> Type {
         match self {
             &Type::Arrow(Arrow { ref arg, ref ret }) => {
-                let arg = arg.apply(ctx);
-                let ret = ret.apply(ctx);
-                Type::Arrow(Arrow::new(arg, ret))
+                let arg = Box::new(arg.apply(ctx));
+                let ret = Box::new(ret.apply(ctx));
+                Type::Arrow(Arrow { arg, ret })
             }
             &Type::Constructed(ref name, ref args) => {
                 let args = args.iter()
@@ -305,9 +308,9 @@ impl Type {
                 if !self.is_polymorphic() {
                     self.clone()
                 } else {
-                    let arg = arg.instantiate(ctx, bindings);
-                    let ret = ret.instantiate(ctx, bindings);
-                    Arrow::new(arg, ret).into()
+                    let arg = Box::new(arg.instantiate(ctx, bindings));
+                    let ret = Box::new(ret.instantiate(ctx, bindings));
+                    Type::Arrow(Arrow { arg, ret })
                 }
             }
             &Type::Constructed(name, ref args) => {
@@ -386,11 +389,6 @@ pub struct Arrow {
     pub ret: Box<Type>,
 }
 impl Arrow {
-    pub fn new(arg: Type, ret: Type) -> Arrow {
-        let arg = Box::new(arg);
-        let ret = Box::new(ret);
-        Arrow { arg, ret }
-    }
     /// Get all arguments to the function, recursing through curried functions.
     pub fn args(&self) -> VecDeque<&Type> {
         if let Type::Arrow(ref arrow) = *self.ret {

@@ -3,16 +3,16 @@
 /// This is equivalent to:
 ///
 /// ```rust,ignore
-/// Type::Arrow(Arrow::new(
-///     tp0,
-///     Arrow::new(
-///         tp1,
-///         Arrow::new(
-///             tp2,
+/// Type::Arrow(Arrow {
+///     arg: Box::new(tp0),
+///     ret: Box::new(Type::Arrow(Arrow {
+///         arg: Box::new(tp1),
+///         ret: Box::new(Type::Arrow(Arrow {
+///             arg: Box::new(tp2),
 ///             ...
-///         ).into(),
-///     ).into(),
-/// ))
+///         })),
+///     })),
+/// })
 /// ```
 ///
 /// # Examples
@@ -41,11 +41,12 @@
 macro_rules! arrow {
     [$x:expr] => ($x);
     [$x:expr, $($xs:expr),*] => (
-        $crate::Type::Arrow($crate::Arrow::new($x, arrow!($($xs),+)))
+        $crate::Type::Arrow($crate::Arrow {
+            arg: Box::new($x),
+            ret: Box::new(arrow!($($xs),+)),
+        })
     );
-    [$x:expr, $($xs:expr,)*] => (
-        arrow![$x, $($xs),*]
-    )
+    [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
 }
 
 /// Creates a [`Type::Constructed`] or [`Type::Variable`][] (convenience for common pattern).
