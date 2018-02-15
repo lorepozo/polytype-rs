@@ -15,8 +15,8 @@ polytype = "1.0"
 ```
 
 Provided by **`polytype`** are the
-[`Type`](https://docs.rs/polytype/1.0.1/polytype/enum.Type.html) enum and
-the [`Context`](https://docs.rs/polytype/1.0.1/polytype/struct.Context.html)
+[`Type`](https://docs.rs/polytype/1.0.2/polytype/enum.Type.html) enum and
+the [`Context`](https://docs.rs/polytype/1.0.2/polytype/struct.Context.html)
 struct.
 
 The basics:

@@ -1,11 +1,11 @@
 [package]
 name = "polytype"
-version = "1.0.1"
+version = "1.0.2"
 authors = ["Lucas Morales <lucas@lucasem.com>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/lucasem/polytype"
-homepage = "https://github.com/lucasem/polytype"
+repository = "https://github.com/lucasem/polytype-rs"
+homepage = "https://github.com/lucasem/polytype-rs"
 documentation = "https://docs.rs/polytype"
 description = "A Hindley-Milner polymorphic typing system."
 keywords = ["typing", "language", "type", "inference", "unification"]
