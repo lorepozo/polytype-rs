@@ -11,12 +11,12 @@ Implements type inference via unification.
 
 ```toml
 [dependencies]
-polytype = "1.0"
+polytype = "1.1"
 ```
 
 Provided by **`polytype`** are the
-[`Type`](https://docs.rs/polytype/1.0.4/polytype/enum.Type.html) enum and
-the [`Context`](https://docs.rs/polytype/1.0.4/polytype/struct.Context.html)
+[`Type`](https://docs.rs/polytype/1.1.0/polytype/enum.Type.html) enum and
+the [`Context`](https://docs.rs/polytype/1.1.0/polytype/struct.Context.html)
 struct.
 
 Unification:
