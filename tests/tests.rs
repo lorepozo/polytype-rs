@@ -24,7 +24,7 @@ fn variables(tp: &Type) -> Vec<u32> {
 
 #[test]
 fn test_arrow_macro() {
-    assert_eq!(arrow!(Type::Variable(0)), Type::Variable(0),);
+    assert_eq!(arrow!(Type::Variable(0)), Type::Variable(0));
     assert_eq!(
         arrow!(Type::Variable(0), Type::Variable(1), Type::Variable(2)),
         Type::Arrow(Arrow {
@@ -57,7 +57,7 @@ fn test_arrow_macro() {
 
 #[test]
 fn test_tp_macro() {
-    assert_eq!(tp!(bool), Type::Constructed("bool", vec![]),);
+    assert_eq!(tp!(bool), Type::Constructed("bool", vec![]));
     assert_eq!(
         tp!(list(tp!(bool))),
         Type::Constructed("list", vec![Box::new(Type::Constructed("bool", vec![]))]),
