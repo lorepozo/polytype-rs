@@ -87,7 +87,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 /// Represents a type in the Hindley-Milner polymorphic typing system.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type {
     /// For functions `α → β`.
     ///
@@ -383,7 +383,7 @@ impl From<Arrow> for Type {
 /// } else { unreachable!() } // we know func is an arrow
 /// # }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Arrow {
     pub arg: Box<Type>,
     pub ret: Box<Type>,
