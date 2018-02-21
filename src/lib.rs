@@ -349,6 +349,26 @@ impl From<Arrow> for Type {
         Type::Arrow(arrow)
     }
 }
+impl From<VecDeque<Type>> for Type {
+    fn from(mut tps: VecDeque<Type>) -> Type {
+        match tps.len() {
+            0 => panic!("cannot create a type from nothing"),
+            1 => tps.pop_front().unwrap(),
+            2 => {
+                let arg = Box::new(tps.pop_front().unwrap());
+                let ret = Box::new(tps.pop_front().unwrap());
+                Type::Arrow(Arrow { arg, ret })
+            }
+            _ => {
+                let first_arg = tps.pop_front().unwrap();
+                Type::Arrow(Arrow {
+                    arg: Box::new(first_arg),
+                    ret: Box::new(tps.into()),
+                })
+            }
+        }
+    }
+}
 
 /// A curried function.
 ///

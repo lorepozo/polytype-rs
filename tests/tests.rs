@@ -1,7 +1,7 @@
 extern crate polytype;
 
 use polytype::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 fn find_variables(tp: &Type, o: &mut Vec<u32>) {
     match tp {
@@ -142,6 +142,52 @@ fn test_arrow_methods() {
     assert_eq!(ta4, ta1);
     assert_eq!(ta4, ta2);
     assert_eq!(ta4, ta3);
+}
+
+#[test]
+fn test_tp_from() {
+    let mut tps = VecDeque::new();
+    tps.push_back(Type::Variable(0));
+    let tp: Type = tps.clone().into();
+    assert_eq!(tp, Type::Variable(0));
+
+    tps.push_back(Type::Variable(1));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Variable(1)),
+        })
+    );
+
+    tps.push_back(Type::Variable(2));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Arrow(Arrow {
+                arg: Box::new(Type::Variable(1)),
+                ret: Box::new(Type::Variable(2)),
+            })),
+        })
+    );
+    tps.push_back(Type::Variable(3));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Arrow(Arrow {
+                arg: Box::new(Type::Variable(1)),
+                ret: Box::new(Type::Arrow(Arrow {
+                    arg: Box::new(Type::Variable(2)),
+                    ret: Box::new(Type::Variable(3)),
+                })),
+            })),
+        })
+    );
 }
 
 #[test]
