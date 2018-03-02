@@ -145,7 +145,7 @@ fn test_arrow_methods() {
 }
 
 #[test]
-fn test_tp_from() {
+fn test_tp_from_vecdeque() {
     let mut tps = VecDeque::new();
     tps.push_back(Type::Variable(0));
     let tp: Type = tps.clone().into();
@@ -174,6 +174,52 @@ fn test_tp_from() {
         })
     );
     tps.push_back(Type::Variable(3));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Arrow(Arrow {
+                arg: Box::new(Type::Variable(1)),
+                ret: Box::new(Type::Arrow(Arrow {
+                    arg: Box::new(Type::Variable(2)),
+                    ret: Box::new(Type::Variable(3)),
+                })),
+            })),
+        })
+    );
+}
+
+#[test]
+fn test_tp_from_vec() {
+    let mut tps = Vec::new();
+    tps.push(Type::Variable(0));
+    let tp: Type = tps.clone().into();
+    assert_eq!(tp, Type::Variable(0));
+
+    tps.push(Type::Variable(1));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Variable(1)),
+        })
+    );
+
+    tps.push(Type::Variable(2));
+    let tp: Type = tps.clone().into();
+    assert_eq!(
+        tp,
+        Type::Arrow(Arrow {
+            arg: Box::new(Type::Variable(0)),
+            ret: Box::new(Type::Arrow(Arrow {
+                arg: Box::new(Type::Variable(1)),
+                ret: Box::new(Type::Variable(2)),
+            })),
+        })
+    );
+    tps.push(Type::Variable(3));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,

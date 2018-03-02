@@ -369,6 +369,11 @@ impl From<VecDeque<Type>> for Type {
         }
     }
 }
+impl From<Vec<Type>> for Type {
+    fn from(tps: Vec<Type>) -> Type {
+        Type::from(VecDeque::from(tps))
+    }
+}
 
 /// A curried function.
 ///
