@@ -4,15 +4,15 @@ use polytype::*;
 use std::collections::{HashMap, VecDeque};
 
 fn find_variables(tp: &Type, o: &mut Vec<u32>) {
-    match tp {
-        &Type::Arrow(Arrow { ref arg, ref ret }) => {
+    match *tp {
+        Type::Arrow(Arrow { ref arg, ref ret }) => {
             find_variables(arg, o);
             find_variables(ret, o)
         }
-        &Type::Constructed(_, ref args) => for arg in args {
+        Type::Constructed(_, ref args) => for arg in args {
             find_variables(arg, o)
         },
-        &Type::Variable(v) => o.push(v),
+        Type::Variable(v) => o.push(v),
     }
 }
 
@@ -278,8 +278,8 @@ fn test_instantiate() {
     let t3 = tp!(list(tp!(3))).instantiate(&mut ctx, &mut bindings);
 
     // type variables start at 0
-    assert_eq!(bindings.get(&2).unwrap(), &tp!(0));
-    assert_eq!(bindings.get(&3).unwrap(), &tp!(1));
+    assert_eq!(&bindings[&2], &tp!(0));
+    assert_eq!(&bindings[&3], &tp!(1));
     // like replaces like
     assert_eq!(variables(&t1), variables(&t2));
     // substitutions are not made
@@ -298,8 +298,8 @@ fn test_canonicalize() {
     let t3 = tp!(list(tp!(3))).canonical(&mut bindings);
 
     // type variables start at 0
-    assert_eq!(bindings.get(&2).unwrap(), &tp!(0));
-    assert_eq!(bindings.get(&3).unwrap(), &tp!(1));
+    assert_eq!(&bindings[&2], &tp!(0));
+    assert_eq!(&bindings[&3], &tp!(1));
     // like replaces like
     assert_eq!(variables(&t1), variables(&t2));
     assert_eq!(t3, tp!(list(tp!(1))));

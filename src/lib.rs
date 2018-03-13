@@ -178,33 +178,31 @@ pub enum Type {
 impl Type {
     /// Whether a type has any type variables.
     pub fn is_polymorphic(&self) -> bool {
-        match self {
-            &Type::Arrow(Arrow { ref arg, ref ret }) => {
-                arg.is_polymorphic() || ret.is_polymorphic()
-            }
-            &Type::Constructed(_, ref args) => args.iter().any(|t| t.is_polymorphic()),
-            &Type::Variable(_) => true,
+        match *self {
+            Type::Arrow(Arrow { ref arg, ref ret }) => arg.is_polymorphic() || ret.is_polymorphic(),
+            Type::Constructed(_, ref args) => args.iter().any(|t| t.is_polymorphic()),
+            Type::Variable(_) => true,
         }
     }
     fn occurs(&self, v: u32) -> bool {
-        match self {
-            &Type::Arrow(Arrow { ref arg, ref ret }) => arg.occurs(v) || ret.occurs(v),
-            &Type::Constructed(_, ref args) => args.iter().any(|t| t.occurs(v)),
-            &Type::Variable(n) => n == v,
+        match *self {
+            Type::Arrow(Arrow { ref arg, ref ret }) => arg.occurs(v) || ret.occurs(v),
+            Type::Constructed(_, ref args) => args.iter().any(|t| t.occurs(v)),
+            Type::Variable(n) => n == v,
         }
     }
     /// Supplying is_return helps arrows look cleaner.
     fn show(&self, is_return: bool) -> String {
-        match self {
-            &Type::Arrow(ref arrow) => arrow.show(is_return),
-            &Type::Constructed(name, ref args) => {
+        match *self {
+            Type::Arrow(ref arrow) => arrow.show(is_return),
+            Type::Constructed(name, ref args) => {
                 if args.is_empty() {
                     String::from(name)
                 } else {
                     format!("{}({})", name, args.iter().map(|t| t.show(true)).join(","))
                 }
             }
-            &Type::Variable(v) => format!("t{}", v),
+            Type::Variable(v) => format!("t{}", v),
         }
     }
     /// Applies the type in a context.
@@ -227,20 +225,17 @@ impl Type {
     /// # }
     /// ```
     pub fn apply(&self, ctx: &Context) -> Type {
-        match self {
-            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+        match *self {
+            Type::Arrow(Arrow { ref arg, ref ret }) => {
                 let arg = Box::new(arg.apply(ctx));
                 let ret = Box::new(ret.apply(ctx));
                 Type::Arrow(Arrow { arg, ret })
             }
-            &Type::Constructed(ref name, ref args) => {
-                let args = args.iter()
-                    .map(|t| t.apply(ctx))
-                    .map(|t| Box::new(t))
-                    .collect();
+            Type::Constructed(name, ref args) => {
+                let args = args.iter().map(|t| t.apply(ctx)).map(Box::new).collect();
                 Type::Constructed(name, args)
             }
-            &Type::Variable(v) => {
+            Type::Variable(v) => {
                 if let Some(tp) = ctx.substitutions.get(&v) {
                     tp.apply(ctx)
                 } else {
@@ -303,8 +298,8 @@ impl Type {
     /// # }
     /// ```
     pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
-        match self {
-            &Type::Arrow(Arrow { ref arg, ref ret }) => {
+        match *self {
+            Type::Arrow(Arrow { ref arg, ref ret }) => {
                 if !self.is_polymorphic() {
                     self.clone()
                 } else {
@@ -313,18 +308,18 @@ impl Type {
                     Type::Arrow(Arrow { arg, ret })
                 }
             }
-            &Type::Constructed(name, ref args) => {
+            Type::Constructed(name, ref args) => {
                 if !self.is_polymorphic() {
                     self.clone()
                 } else {
                     let args = args.iter()
                         .map(|t| t.instantiate(ctx, bindings))
-                        .map(|t| Box::new(t))
+                        .map(Box::new)
                         .collect();
                     Type::Constructed(name, args)
                 }
             }
-            &Type::Variable(v) => bindings
+            Type::Variable(v) => bindings
                 .entry(v)
                 .or_insert_with(|| ctx.new_variable())
                 .clone(),
@@ -453,9 +448,9 @@ pub enum UnificationError {
 }
 impl fmt::Display for UnificationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            &UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
-            &UnificationError::Failure(ref t1, ref t2) => {
+        match *self {
+            UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
+            UnificationError::Failure(ref t1, ref t2) => {
                 write!(f, "Failure({}, {})", t1.show(false), t2.show(false))
             }
         }
@@ -494,7 +489,7 @@ impl Context {
     ///
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
     pub fn new_variable(&mut self) -> Type {
-        self.next = self.next + 1;
+        self.next += 1;
         Type::Variable(self.next - 1)
     }
     /// Create constraints within the context that ensure the two types unify.
@@ -573,8 +568,8 @@ impl Context {
     /// unify_internal may mutate the context even with an error.
     /// The context on which it's called should be discarded if there's an error.
     fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
-        let t1 = t1.apply(&self);
-        let t2 = t2.apply(&self);
+        let t1 = t1.apply(self);
+        let t2 = t2.apply(self);
         if t1 == t2 {
             return Ok(());
         }
