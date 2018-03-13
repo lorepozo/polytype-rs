@@ -3,16 +3,16 @@
 /// This is equivalent to:
 ///
 /// ```rust,ignore
-/// Type::Arrow(Arrow {
-///     arg: Box::new(tp0),
-///     ret: Box::new(Type::Arrow(Arrow {
-///         arg: Box::new(tp1),
-///         ret: Box::new(Type::Arrow(Arrow {
-///             arg: Box::new(tp2),
+/// Type::Arrow(Box::new(Arrow {
+///     arg: tp0,
+///     ret: Type::Arrow(Box::new(Arrow {
+///         arg: tp1,
+///         ret: Type::Arrow(Box::new(Arrow {
+///             arg: tp2,
 ///             ...
 ///         })),
 ///     })),
-/// })
+/// }))
 /// ```
 ///
 /// # Examples
@@ -25,13 +25,13 @@
 /// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
 /// assert_eq!(format!("{}", t), "t0 → t1 → t2");
 /// // equivalent to:
-/// let t_eq = Type::Arrow(Arrow{
-///     arg: Box::new(Type::Variable(0)),
-///     ret: Box::new(Type::Arrow(Arrow{
-///         arg: Box::new(Type::Variable(1)),
-///         ret: Box::new(Type::Variable(2)),
+/// let t_eq = Type::Arrow(Box::new(Arrow{
+///     arg: Type::Variable(0),
+///     ret: Type::Arrow(Box::new(Arrow{
+///         arg: Type::Variable(1),
+///         ret: Type::Variable(2),
 ///     })),
-/// });
+/// }));
 /// assert_eq!(t, t_eq);
 /// # }
 /// ```
@@ -41,10 +41,10 @@
 macro_rules! arrow {
     [$x:expr] => ($x);
     [$x:expr, $($xs:expr),*] => (
-        $crate::Type::Arrow($crate::Arrow {
-            arg: Box::new($x),
-            ret: Box::new(arrow!($($xs),+)),
-        })
+        $crate::Type::Arrow(Box::new($crate::Arrow {
+            arg: $x,
+            ret: arrow!($($xs),+),
+        }))
     );
     [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
 }
@@ -54,8 +54,8 @@ macro_rules! arrow {
 /// ```rust,ignore
 /// // equivalent to:
 /// Type::Constructed(ident, vec![
-///     Box::new(tp1),
-///     Box::new(tp2),
+///     tp1,
+///     tp2,
 ///     ...
 /// ])
 /// // or
@@ -104,8 +104,8 @@ macro_rules! arrow {
 /// assert_eq!(format!("{}", t), "dict(str,int)");
 /// // equivalent to:
 /// let t_eq = Type::Constructed("dict", vec![
-///     Box::new(Type::Constructed("str", vec![])),
-///     Box::new(Type::Constructed("int", vec![])),
+///     Type::Constructed("str", vec![]),
+///     Type::Constructed("int", vec![]),
 /// ]);
 /// assert_eq!(t, t_eq);
 /// # }
@@ -133,7 +133,7 @@ macro_rules! arrow {
 macro_rules! tp {
     ($n:ident) => ($crate::Type::Constructed(stringify!($n), Vec::new()));
     ($n:ident($($x:expr),*)) => {
-        $crate::Type::Constructed(stringify!($n), vec![$(Box::new($x)),*])
+        $crate::Type::Constructed(stringify!($n), vec![$($x),*])
     };
     ($n:ident($($x:expr,)*)) => (tp!($n($($x),*)));
     ($n:expr) => ($crate::Type::Variable($n));

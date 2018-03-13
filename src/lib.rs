@@ -97,10 +97,10 @@ pub enum Type {
     ///
     /// ```
     /// # use polytype::{Arrow, Type};
-    /// let t = Type::Arrow(Arrow {
-    ///     arg: Box::new(Type::Variable(0)),
-    ///     ret: Box::new(Type::Variable(1)),
-    /// });
+    /// let t = Type::Arrow(Box::new(Arrow {
+    ///     arg: Type::Variable(0),
+    ///     ret: Type::Variable(1),
+    /// }));
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     /// ```
     ///
@@ -113,7 +113,7 @@ pub enum Type {
     /// assert_eq!(format!("{}", &t), "t0 → t1 → int → bool");
     /// # }
     /// ```
-    Arrow(Arrow),
+    Arrow(Box<Arrow>),
     /// For primitive or composite types.
     ///
     /// # Examples
@@ -131,7 +131,7 @@ pub enum Type {
     /// ```
     /// # use polytype::Type;
     /// let tint = Type::Constructed("int", vec![]);
-    /// let tlist_of_ints = Type::Constructed("list", vec![Box::new(tint)]);
+    /// let tlist_of_ints = Type::Constructed("list", vec![tint]);
     /// assert_eq!(format!("{}", &tlist_of_ints), "list(int)");
     /// ```
     ///
@@ -144,7 +144,7 @@ pub enum Type {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    Constructed(&'static str, Vec<Box<Type>>),
+    Constructed(&'static str, Vec<Type>),
     /// For type variables.
     ///
     /// # Examples
@@ -179,14 +179,14 @@ impl Type {
     /// Whether a type has any type variables.
     pub fn is_polymorphic(&self) -> bool {
         match *self {
-            Type::Arrow(Arrow { ref arg, ref ret }) => arg.is_polymorphic() || ret.is_polymorphic(),
+            Type::Arrow(ref arr) => arr.arg.is_polymorphic() || arr.ret.is_polymorphic(),
             Type::Constructed(_, ref args) => args.iter().any(|t| t.is_polymorphic()),
             Type::Variable(_) => true,
         }
     }
     fn occurs(&self, v: u32) -> bool {
         match *self {
-            Type::Arrow(Arrow { ref arg, ref ret }) => arg.occurs(v) || ret.occurs(v),
+            Type::Arrow(ref arr) => arr.arg.occurs(v) || arr.ret.occurs(v),
             Type::Constructed(_, ref args) => args.iter().any(|t| t.occurs(v)),
             Type::Variable(n) => n == v,
         }
@@ -194,7 +194,7 @@ impl Type {
     /// Supplying is_return helps arrows look cleaner.
     fn show(&self, is_return: bool) -> String {
         match *self {
-            Type::Arrow(ref arrow) => arrow.show(is_return),
+            Type::Arrow(ref arr) => arr.show(is_return),
             Type::Constructed(name, ref args) => {
                 if args.is_empty() {
                     String::from(name)
@@ -226,13 +226,13 @@ impl Type {
     /// ```
     pub fn apply(&self, ctx: &Context) -> Type {
         match *self {
-            Type::Arrow(Arrow { ref arg, ref ret }) => {
-                let arg = Box::new(arg.apply(ctx));
-                let ret = Box::new(ret.apply(ctx));
-                Type::Arrow(Arrow { arg, ret })
+            Type::Arrow(ref arr) => {
+                let arg = arr.arg.apply(ctx);
+                let ret = arr.ret.apply(ctx);
+                Type::Arrow(Box::new(Arrow { arg, ret }))
             }
             Type::Constructed(name, ref args) => {
-                let args = args.iter().map(|t| t.apply(ctx)).map(Box::new).collect();
+                let args = args.iter().map(|t| t.apply(ctx)).collect();
                 Type::Constructed(name, args)
             }
             Type::Variable(v) => {
@@ -299,23 +299,20 @@ impl Type {
     /// ```
     pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
         match *self {
-            Type::Arrow(Arrow { ref arg, ref ret }) => {
+            Type::Arrow(ref arr) => {
                 if !self.is_polymorphic() {
                     self.clone()
                 } else {
-                    let arg = Box::new(arg.instantiate(ctx, bindings));
-                    let ret = Box::new(ret.instantiate(ctx, bindings));
-                    Type::Arrow(Arrow { arg, ret })
+                    let arg = arr.arg.instantiate(ctx, bindings);
+                    let ret = arr.ret.instantiate(ctx, bindings);
+                    Type::Arrow(Box::new(Arrow { arg, ret }))
                 }
             }
             Type::Constructed(name, ref args) => {
                 if !self.is_polymorphic() {
                     self.clone()
                 } else {
-                    let args = args.iter()
-                        .map(|t| t.instantiate(ctx, bindings))
-                        .map(Box::new)
-                        .collect();
+                    let args = args.iter().map(|t| t.instantiate(ctx, bindings)).collect();
                     Type::Constructed(name, args)
                 }
             }
@@ -341,7 +338,7 @@ impl fmt::Display for Type {
 }
 impl From<Arrow> for Type {
     fn from(arrow: Arrow) -> Type {
-        Type::Arrow(arrow)
+        Type::Arrow(Box::new(arrow))
     }
 }
 impl From<VecDeque<Type>> for Type {
@@ -350,16 +347,16 @@ impl From<VecDeque<Type>> for Type {
             0 => panic!("cannot create a type from nothing"),
             1 => tps.pop_front().unwrap(),
             2 => {
-                let arg = Box::new(tps.pop_front().unwrap());
-                let ret = Box::new(tps.pop_front().unwrap());
-                Type::Arrow(Arrow { arg, ret })
+                let arg = tps.pop_front().unwrap();
+                let ret = tps.pop_front().unwrap();
+                Type::Arrow(Box::new(Arrow { arg, ret }))
             }
             _ => {
                 let first_arg = tps.pop_front().unwrap();
-                Type::Arrow(Arrow {
-                    arg: Box::new(first_arg),
-                    ret: Box::new(tps.into()),
-                })
+                Type::Arrow(Box::new(Arrow {
+                    arg: first_arg,
+                    ret: tps.into(),
+                }))
             }
         }
     }
@@ -378,10 +375,10 @@ impl From<Vec<Type>> for Type {
 /// use polytype::{Type, Arrow};
 ///
 /// let func = Arrow{
-///     arg: Box::new(Type::Variable(0)),
-///     ret: Box::new(Type::Arrow(Arrow{
-///         arg: Box::new(Type::Variable(1)),
-///         ret: Box::new(Type::Variable(2)),
+///     arg: Type::Variable(0),
+///     ret: Type::Arrow(Box::new(Arrow{
+///         arg: Type::Variable(1),
+///         ret: Type::Variable(2),
 ///     })),
 /// };
 ///
@@ -405,25 +402,25 @@ impl From<Vec<Type>> for Type {
 /// ```
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Arrow {
-    pub arg: Box<Type>,
-    pub ret: Box<Type>,
+    pub arg: Type,
+    pub ret: Type,
 }
 impl Arrow {
     /// Get all arguments to the function, recursing through curried functions.
     pub fn args(&self) -> VecDeque<&Type> {
-        if let Type::Arrow(ref arrow) = *self.ret {
+        if let Type::Arrow(ref arrow) = self.ret {
             let mut tps = arrow.args();
             tps.push_front(&self.arg);
             tps
         } else {
             let mut tps = VecDeque::new();
-            tps.push_front(&*self.arg);
+            tps.push_front(&self.arg);
             tps
         }
     }
     /// Get the return type of the function, recursing through curried function returns.
     pub fn returns(&self) -> &Type {
-        if let Type::Arrow(ref arrow) = *self.ret {
+        if let Type::Arrow(ref arrow) = self.ret {
             arrow.returns()
         } else {
             &self.ret

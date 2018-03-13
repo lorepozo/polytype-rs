@@ -5,9 +5,9 @@ use std::collections::{HashMap, VecDeque};
 
 fn find_variables(tp: &Type, o: &mut Vec<u32>) {
     match *tp {
-        Type::Arrow(Arrow { ref arg, ref ret }) => {
-            find_variables(arg, o);
-            find_variables(ret, o)
+        Type::Arrow(ref arr) => {
+            find_variables(&arr.arg, o);
+            find_variables(&arr.ret, o)
         }
         Type::Constructed(_, ref args) => for arg in args {
             find_variables(arg, o)
@@ -27,13 +27,13 @@ fn test_arrow_macro() {
     assert_eq!(arrow!(Type::Variable(0)), Type::Variable(0));
     assert_eq!(
         arrow!(Type::Variable(0), Type::Variable(1), Type::Variable(2)),
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Variable(2)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Variable(2),
             })),
-        })
+        }))
     );
     assert_eq!(
         arrow!(
@@ -42,16 +42,16 @@ fn test_arrow_macro() {
             Type::Variable(2),
             Type::Variable(3),
         ),
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Arrow(Arrow {
-                    arg: Box::new(Type::Variable(2)),
-                    ret: Box::new(Type::Variable(3)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Arrow(Box::new(Arrow {
+                    arg: Type::Variable(2),
+                    ret: Type::Variable(3),
                 })),
             })),
-        })
+        }))
     );
 }
 
@@ -60,20 +60,20 @@ fn test_tp_macro() {
     assert_eq!(tp!(bool), Type::Constructed("bool", vec![]));
     assert_eq!(
         tp!(list(tp!(bool))),
-        Type::Constructed("list", vec![Box::new(Type::Constructed("bool", vec![]))]),
+        Type::Constructed("list", vec![Type::Constructed("bool", vec![])]),
     );
     assert_eq!(
         tp!(list(tp!(tuple(tp!(bool), tp!(int))))),
         Type::Constructed(
             "list",
             vec![
-                Box::new(Type::Constructed(
+                Type::Constructed(
                     "tuple",
                     vec![
-                        Box::new(Type::Constructed("bool", vec![])),
-                        Box::new(Type::Constructed("int", vec![])),
+                        Type::Constructed("bool", vec![]),
+                        Type::Constructed("int", vec![]),
                     ],
-                )),
+                ),
             ]
         ),
     );
@@ -85,14 +85,8 @@ fn test_tp_macro() {
         Type::Constructed(
             "list",
             vec![
-                Box::new(Type::Constructed(
-                    "unusually_large_identifier_requiring_wrap",
-                    vec![],
-                )),
-                Box::new(Type::Constructed(
-                    "unusually_large_identifier_requiring_wrap",
-                    vec![],
-                )),
+                Type::Constructed("unusually_large_identifier_requiring_wrap", vec![]),
+                Type::Constructed("unusually_large_identifier_requiring_wrap", vec![]),
             ],
         ),
     );
@@ -102,12 +96,12 @@ fn test_tp_macro() {
         Type::Constructed(
             "hashmap",
             vec![
-                Box::new(Type::Constructed("str", vec![])),
-                Box::new(Type::Arrow(Arrow {
-                    arg: Box::new(Type::Constructed("int", vec![])),
-                    ret: Box::new(Type::Arrow(Arrow {
-                        arg: Box::new(Type::Variable(0)),
-                        ret: Box::new(Type::Constructed("bool", vec![])),
+                Type::Constructed("str", vec![]),
+                Type::Arrow(Box::new(Arrow {
+                    arg: Type::Constructed("int", vec![]),
+                    ret: Type::Arrow(Box::new(Arrow {
+                        arg: Type::Variable(0),
+                        ret: Type::Constructed("bool", vec![]),
                     })),
                 })),
             ]
@@ -119,22 +113,22 @@ fn test_tp_macro() {
 fn test_arrow_methods() {
     let t0 = Type::Variable(0);
     let t1 = Type::Constructed("int", vec![]);
-    let t2 = Type::Arrow(Arrow {
-        arg: Box::new(t0.clone()),
-        ret: Box::new(t1.clone()),
-    });
-    let ta1 = Type::Arrow(Arrow {
-        arg: Box::new(t2.clone()),
-        ret: Box::new(Type::Arrow(Arrow {
-            arg: Box::new(t1.clone()),
-            ret: Box::new(t0.clone()),
+    let t2 = Type::Arrow(Box::new(Arrow {
+        arg: t0.clone(),
+        ret: t1.clone(),
+    }));
+    let ta1 = Type::Arrow(Box::new(Arrow {
+        arg: t2.clone(),
+        ret: Type::Arrow(Box::new(Arrow {
+            arg: t1.clone(),
+            ret: t0.clone(),
         })),
-    });
+    }));
     let ta2 = Arrow {
-        arg: Box::new(t2.clone()),
-        ret: Box::new(Type::Arrow(Arrow {
-            arg: Box::new(t1.clone()),
-            ret: Box::new(t0.clone()),
+        arg: t2.clone(),
+        ret: Type::Arrow(Box::new(Arrow {
+            arg: t1.clone(),
+            ret: t0.clone(),
         })),
     }.into();
     let ta3 = arrow![t2.clone(), t1.clone(), t0.clone()];
@@ -155,38 +149,38 @@ fn test_tp_from_vecdeque() {
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Variable(1)),
-        })
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Variable(1),
+        }))
     );
 
     tps.push_back(Type::Variable(2));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Variable(2)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Variable(2),
             })),
-        })
+        }))
     );
     tps.push_back(Type::Variable(3));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Arrow(Arrow {
-                    arg: Box::new(Type::Variable(2)),
-                    ret: Box::new(Type::Variable(3)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Arrow(Box::new(Arrow {
+                    arg: Type::Variable(2),
+                    ret: Type::Variable(3),
                 })),
             })),
-        })
+        }))
     );
 }
 
@@ -201,38 +195,38 @@ fn test_tp_from_vec() {
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Variable(1)),
-        })
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Variable(1),
+        }))
     );
 
     tps.push(Type::Variable(2));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Variable(2)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Variable(2),
             })),
-        })
+        }))
     );
     tps.push(Type::Variable(3));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Arrow {
-            arg: Box::new(Type::Variable(0)),
-            ret: Box::new(Type::Arrow(Arrow {
-                arg: Box::new(Type::Variable(1)),
-                ret: Box::new(Type::Arrow(Arrow {
-                    arg: Box::new(Type::Variable(2)),
-                    ret: Box::new(Type::Variable(3)),
+        Type::Arrow(Box::new(Arrow {
+            arg: Type::Variable(0),
+            ret: Type::Arrow(Box::new(Arrow {
+                arg: Type::Variable(1),
+                ret: Type::Arrow(Box::new(Arrow {
+                    arg: Type::Variable(2),
+                    ret: Type::Variable(3),
                 })),
             })),
-        })
+        }))
     );
 }
 
