@@ -41,10 +41,9 @@
 macro_rules! arrow {
     [$x:expr] => ($x);
     [$x:expr, $($xs:expr),*] => (
-        $crate::Type::Arrow(Box::new($crate::Arrow {
-            arg: $x,
-            ret: arrow!($($xs),+),
-        }))
+        match ($x, arrow![$($xs),+]) {
+            (arg, ret) => $crate::Type::Arrow(Box::new($crate::Arrow { arg, ret }))
+        }
     );
     [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
 }
