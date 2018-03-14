@@ -77,6 +77,8 @@
 //! ```
 
 extern crate itertools;
+#[macro_use]
+extern crate nom;
 
 #[macro_use]
 mod macros;
@@ -88,7 +90,7 @@ use std::fmt;
 
 /// Represents a type in the Hindley-Milner polymorphic typing system.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Type {
+pub enum Type<'a> {
     /// For functions `α → β`.
     ///
     /// If a function has many arguments, use currying.
@@ -113,7 +115,7 @@ pub enum Type {
     /// assert_eq!(format!("{}", &t), "t0 → t1 → int → bool");
     /// # }
     /// ```
-    Arrow(Box<Arrow>),
+    Arrow(Box<Arrow<'a>>),
     /// For primitive or composite types.
     ///
     /// # Examples
@@ -144,7 +146,7 @@ pub enum Type {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    Constructed(&'static str, Vec<Type>),
+    Constructed(&'a str, Vec<Type<'a>>),
     /// For type variables.
     ///
     /// # Examples
@@ -175,7 +177,7 @@ pub enum Type {
     /// ```
     Variable(u32),
 }
-impl Type {
+impl<'a> Type<'a> {
     /// Whether a type has any type variables.
     pub fn is_polymorphic(&self) -> bool {
         match *self {
@@ -224,7 +226,7 @@ impl Type {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    pub fn apply(&self, ctx: &Context) -> Type {
+    pub fn apply(&self, ctx: &Context<'a>) -> Type<'a> {
         match *self {
             Type::Arrow(ref arr) => {
                 let arg = arr.arg.apply(ctx);
@@ -268,7 +270,7 @@ impl Type {
     /// ```
     ///
     /// [`Type::instantiate`]: #method.instantiate
-    pub fn instantiate_indep(&self, ctx: &mut Context) -> Type {
+    pub fn instantiate_indep(&self, ctx: &mut Context<'a>) -> Type<'a> {
         self.instantiate(ctx, &mut HashMap::new())
     }
     /// Dependently instantiates a type in the context.
@@ -297,7 +299,11 @@ impl Type {
     /// assert_eq!(format!("{}", &t2), "list(t0)");
     /// # }
     /// ```
-    pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
+    pub fn instantiate(
+        &self,
+        ctx: &mut Context<'a>,
+        bindings: &mut HashMap<u32, Type<'a>>,
+    ) -> Type<'a> {
         match *self {
             Type::Arrow(ref arr) => {
                 if !self.is_polymorphic() {
@@ -325,23 +331,46 @@ impl Type {
     /// Canonicalizes the type by instantiating in an empty context.
     ///
     /// Replaces type variables according to bindings.
-    pub fn canonical(&self, bindings: &mut HashMap<u32, Type>) -> Type {
+    pub fn canonical(&self, bindings: &mut HashMap<u32, Type<'a>>) -> Type<'a> {
         let mut ctx = Context::default();
         ctx.next = bindings.len() as u32;
         self.instantiate(&mut ctx, bindings)
     }
+    /// Parse a type from a string. This round-trips with [`Display`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::Type;
+    /// let t_par = Type::parse("int -> hashmap(str, list(bool))").expect("valid type");
+    /// let t_lit = arrow![tp!(int), tp!(hashmap(tp!(str), tp!(list(tp!(bool)))))];
+    /// assert_eq!(t_par, t_lit);
+    ///
+    /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
+    /// let t = Type::parse(s).expect("valid type");
+    /// let round_trip = format!("{}", &t);
+    /// assert_eq!(s, round_trip);
+    /// # }
+    /// ```
+    ///
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    pub fn parse(s: &str) -> Result<Type, ()> {
+        parser::parse(s)
+    }
 }
-impl fmt::Display for Type {
+impl<'a> fmt::Display for Type<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.show(true))
     }
 }
-impl From<Arrow> for Type {
+impl<'a> From<Arrow<'a>> for Type<'a> {
     fn from(arrow: Arrow) -> Type {
         Type::Arrow(Box::new(arrow))
     }
 }
-impl From<VecDeque<Type>> for Type {
+impl<'a> From<VecDeque<Type<'a>>> for Type<'a> {
     fn from(mut tps: VecDeque<Type>) -> Type {
         match tps.len() {
             0 => panic!("cannot create a type from nothing"),
@@ -361,7 +390,7 @@ impl From<VecDeque<Type>> for Type {
         }
     }
 }
-impl From<Vec<Type>> for Type {
+impl<'a> From<Vec<Type<'a>>> for Type<'a> {
     fn from(tps: Vec<Type>) -> Type {
         Type::from(VecDeque::from(tps))
     }
@@ -401,11 +430,11 @@ impl From<Vec<Type>> for Type {
 /// # }
 /// ```
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Arrow {
-    pub arg: Type,
-    pub ret: Type,
+pub struct Arrow<'a> {
+    pub arg: Type<'a>,
+    pub ret: Type<'a>,
 }
-impl Arrow {
+impl<'a> Arrow<'a> {
     /// Get all arguments to the function, recursing through curried functions.
     pub fn args(&self) -> VecDeque<&Type> {
         if let Type::Arrow(ref arrow) = self.ret {
@@ -436,14 +465,14 @@ impl Arrow {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnificationError {
+pub enum UnificationError<'a> {
     /// `Occurs` is the error when the same type variable occurs in both types in a circular way.
     /// The number of the circular type variable is supplied.
     Occurs(u32),
     /// `Failure` happens when symbols or type variants don't match.
-    Failure(Type, Type),
+    Failure(Type<'a>, Type<'a>),
 }
-impl fmt::Display for UnificationError {
+impl<'a> fmt::Display for UnificationError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
@@ -453,7 +482,7 @@ impl fmt::Display for UnificationError {
         }
     }
 }
-impl std::error::Error for UnificationError {
+impl<'a> std::error::Error for UnificationError<'a> {
     fn description(&self) -> &str {
         "could not unify"
     }
@@ -462,11 +491,11 @@ impl std::error::Error for UnificationError {
 /// Context is a type environment, keeping track of substitutions and type variables. Useful for
 /// _unifying_ (and inferring) types.
 #[derive(Debug, Clone)]
-pub struct Context {
-    substitutions: HashMap<u32, Type>,
+pub struct Context<'a> {
+    substitutions: HashMap<u32, Type<'a>>,
     next: u32,
 }
-impl Default for Context {
+impl<'a> Default for Context<'a> {
     fn default() -> Self {
         Context {
             substitutions: HashMap::new(),
@@ -474,18 +503,18 @@ impl Default for Context {
         }
     }
 }
-impl Context {
-    pub fn substitutions(&self) -> &HashMap<u32, Type> {
+impl<'a> Context<'a> {
+    pub fn substitutions(&self) -> &HashMap<u32, Type<'a>> {
         &self.substitutions
     }
     /// Create a new substitution for the type variable numbered `v` to the type `t`.
-    pub fn extend(&mut self, v: u32, t: Type) {
+    pub fn extend(&mut self, v: u32, t: Type<'a>) {
         self.substitutions.insert(v, t);
     }
     /// Create a new [`Type::Variable`] from the next unused number.
     ///
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
-    pub fn new_variable(&mut self) -> Type {
+    pub fn new_variable(&mut self) -> Type<'a> {
         self.next += 1;
         Type::Variable(self.next - 1)
     }
@@ -556,7 +585,7 @@ impl Context {
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
     /// [`instantiate_indep`]: enum.Type.html#method.instantiate_indep
-    pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+    pub fn unify(&mut self, t1: &Type<'a>, t2: &Type<'a>) -> Result<(), UnificationError<'a>> {
         let mut ctx = self.clone();
         ctx.unify_internal(t1, t2)?;
         *self = ctx;
@@ -564,7 +593,7 @@ impl Context {
     }
     /// unify_internal may mutate the context even with an error.
     /// The context on which it's called should be discarded if there's an error.
-    fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+    fn unify_internal(&mut self, t1: &Type<'a>, t2: &Type<'a>) -> Result<(), UnificationError<'a>> {
         let t1 = t1.apply(self);
         let t2 = t2.apply(self);
         if t1 == t2 {
@@ -608,6 +637,56 @@ impl Context {
                 }
             }
             (t1, t2) => Err(UnificationError::Failure(t1, t2)),
+        }
+    }
+}
+
+mod parser {
+    use std::num::ParseIntError;
+    use nom::types::CompleteStr;
+    use nom::{alpha, digit};
+
+    use super::{Arrow, Type};
+
+    fn nom_u32(inp: CompleteStr) -> Result<u32, ParseIntError> {
+        inp.0.parse()
+    }
+
+    named!(var<CompleteStr, Type>,
+        do_parse!(
+            tag!("t") >>
+            num: map_res!(digit, nom_u32) >>
+            (Type::Variable(num))
+    ));
+    named!(constructed_simple<CompleteStr, Type>,
+        do_parse!(
+            name: alpha >>
+            (Type::Constructed(name.0, vec![]))
+    ));
+    named!(constructed_complex<CompleteStr, Type>,
+        do_parse!(
+            name: alpha >>
+            args: delimited!(
+                tag!("("),
+                separated_list!(tag!(","), ws!(tp)),
+                tag!(")")
+            ) >>
+            (Type::Constructed(name.0, args))
+    ));
+    named!(arrow<CompleteStr, Type>,
+        do_parse!(
+            arg: ws!(alt!(parenthetical | var | constructed_complex | constructed_simple)) >>
+            alt!(tag!("→") | tag!("->")) >>
+            ret: ws!(tp) >>
+            (Type::Arrow(Box::new(Arrow { arg, ret })))
+    ));
+    named!(parenthetical<CompleteStr, Type>, delimited!(tag!("("), arrow, tag!(")")));
+    named!(tp<CompleteStr, Type>, alt!(arrow | var | constructed_complex | constructed_simple));
+
+    pub fn parse(inp: &str) -> Result<Type, ()> {
+        match tp(CompleteStr(inp)) {
+            Ok((_, t)) => Ok(t),
+            _ => Err(()),
         }
     }
 }
