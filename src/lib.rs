@@ -90,7 +90,7 @@ use std::fmt;
 
 /// Represents a type in the Hindley-Milner polymorphic typing system.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Type<'a> {
+pub enum Type {
     /// For functions `α → β`.
     ///
     /// If a function has many arguments, use currying.
@@ -115,7 +115,7 @@ pub enum Type<'a> {
     /// assert_eq!(format!("{}", &t), "t0 → t1 → int → bool");
     /// # }
     /// ```
-    Arrow(Box<Arrow<'a>>),
+    Arrow(Box<Arrow>),
     /// For primitive or composite types.
     ///
     /// # Examples
@@ -146,7 +146,7 @@ pub enum Type<'a> {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    Constructed(&'a str, Vec<Type<'a>>),
+    Constructed(&'static str, Vec<Type>),
     /// For type variables.
     ///
     /// # Examples
@@ -177,7 +177,7 @@ pub enum Type<'a> {
     /// ```
     Variable(u32),
 }
-impl<'a> Type<'a> {
+impl Type {
     /// Whether a type has any type variables.
     pub fn is_polymorphic(&self) -> bool {
         match *self {
@@ -226,7 +226,7 @@ impl<'a> Type<'a> {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    pub fn apply(&self, ctx: &Context<'a>) -> Type<'a> {
+    pub fn apply(&self, ctx: &Context) -> Type {
         match *self {
             Type::Arrow(ref arr) => {
                 let arg = arr.arg.apply(ctx);
@@ -270,7 +270,7 @@ impl<'a> Type<'a> {
     /// ```
     ///
     /// [`Type::instantiate`]: #method.instantiate
-    pub fn instantiate_indep(&self, ctx: &mut Context<'a>) -> Type<'a> {
+    pub fn instantiate_indep(&self, ctx: &mut Context) -> Type {
         self.instantiate(ctx, &mut HashMap::new())
     }
     /// Dependently instantiates a type in the context.
@@ -299,11 +299,7 @@ impl<'a> Type<'a> {
     /// assert_eq!(format!("{}", &t2), "list(t0)");
     /// # }
     /// ```
-    pub fn instantiate(
-        &self,
-        ctx: &mut Context<'a>,
-        bindings: &mut HashMap<u32, Type<'a>>,
-    ) -> Type<'a> {
+    pub fn instantiate(&self, ctx: &mut Context, bindings: &mut HashMap<u32, Type>) -> Type {
         match *self {
             Type::Arrow(ref arr) => {
                 if !self.is_polymorphic() {
@@ -331,12 +327,14 @@ impl<'a> Type<'a> {
     /// Canonicalizes the type by instantiating in an empty context.
     ///
     /// Replaces type variables according to bindings.
-    pub fn canonical(&self, bindings: &mut HashMap<u32, Type<'a>>) -> Type<'a> {
+    pub fn canonical(&self, bindings: &mut HashMap<u32, Type>) -> Type {
         let mut ctx = Context::default();
         ctx.next = bindings.len() as u32;
         self.instantiate(&mut ctx, bindings)
     }
-    /// Parse a type from a string. This round-trips with [`Display`].
+    /// Parse a type from a string. This round-trips with [`Display`]. This is a **leaky**
+    /// operation and should be avoided wherever possible: names of constructed types will remain
+    /// until program termination.
     ///
     /// # Examples
     ///
@@ -360,17 +358,17 @@ impl<'a> Type<'a> {
         parser::parse(s)
     }
 }
-impl<'a> fmt::Display for Type<'a> {
+impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.show(true))
     }
 }
-impl<'a> From<Arrow<'a>> for Type<'a> {
+impl From<Arrow> for Type {
     fn from(arrow: Arrow) -> Type {
         Type::Arrow(Box::new(arrow))
     }
 }
-impl<'a> From<VecDeque<Type<'a>>> for Type<'a> {
+impl From<VecDeque<Type>> for Type {
     fn from(mut tps: VecDeque<Type>) -> Type {
         match tps.len() {
             0 => panic!("cannot create a type from nothing"),
@@ -390,7 +388,7 @@ impl<'a> From<VecDeque<Type<'a>>> for Type<'a> {
         }
     }
 }
-impl<'a> From<Vec<Type<'a>>> for Type<'a> {
+impl From<Vec<Type>> for Type {
     fn from(tps: Vec<Type>) -> Type {
         Type::from(VecDeque::from(tps))
     }
@@ -430,11 +428,11 @@ impl<'a> From<Vec<Type<'a>>> for Type<'a> {
 /// # }
 /// ```
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Arrow<'a> {
-    pub arg: Type<'a>,
-    pub ret: Type<'a>,
+pub struct Arrow {
+    pub arg: Type,
+    pub ret: Type,
 }
-impl<'a> Arrow<'a> {
+impl Arrow {
     /// Get all arguments to the function, recursing through curried functions.
     pub fn args(&self) -> VecDeque<&Type> {
         if let Type::Arrow(ref arrow) = self.ret {
@@ -465,14 +463,14 @@ impl<'a> Arrow<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnificationError<'a> {
+pub enum UnificationError {
     /// `Occurs` is the error when the same type variable occurs in both types in a circular way.
     /// The number of the circular type variable is supplied.
     Occurs(u32),
     /// `Failure` happens when symbols or type variants don't match.
-    Failure(Type<'a>, Type<'a>),
+    Failure(Type, Type),
 }
-impl<'a> fmt::Display for UnificationError<'a> {
+impl fmt::Display for UnificationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
@@ -482,7 +480,7 @@ impl<'a> fmt::Display for UnificationError<'a> {
         }
     }
 }
-impl<'a> std::error::Error for UnificationError<'a> {
+impl std::error::Error for UnificationError {
     fn description(&self) -> &str {
         "could not unify"
     }
@@ -491,11 +489,11 @@ impl<'a> std::error::Error for UnificationError<'a> {
 /// Context is a type environment, keeping track of substitutions and type variables. Useful for
 /// _unifying_ (and inferring) types.
 #[derive(Debug, Clone)]
-pub struct Context<'a> {
-    substitutions: HashMap<u32, Type<'a>>,
+pub struct Context {
+    substitutions: HashMap<u32, Type>,
     next: u32,
 }
-impl<'a> Default for Context<'a> {
+impl Default for Context {
     fn default() -> Self {
         Context {
             substitutions: HashMap::new(),
@@ -503,18 +501,18 @@ impl<'a> Default for Context<'a> {
         }
     }
 }
-impl<'a> Context<'a> {
-    pub fn substitutions(&self) -> &HashMap<u32, Type<'a>> {
+impl Context {
+    pub fn substitutions(&self) -> &HashMap<u32, Type> {
         &self.substitutions
     }
     /// Create a new substitution for the type variable numbered `v` to the type `t`.
-    pub fn extend(&mut self, v: u32, t: Type<'a>) {
+    pub fn extend(&mut self, v: u32, t: Type) {
         self.substitutions.insert(v, t);
     }
     /// Create a new [`Type::Variable`] from the next unused number.
     ///
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
-    pub fn new_variable(&mut self) -> Type<'a> {
+    pub fn new_variable(&mut self) -> Type {
         self.next += 1;
         Type::Variable(self.next - 1)
     }
@@ -585,7 +583,7 @@ impl<'a> Context<'a> {
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
     /// [`instantiate_indep`]: enum.Type.html#method.instantiate_indep
-    pub fn unify(&mut self, t1: &Type<'a>, t2: &Type<'a>) -> Result<(), UnificationError<'a>> {
+    pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
         let mut ctx = self.clone();
         ctx.unify_internal(t1, t2)?;
         *self = ctx;
@@ -593,7 +591,7 @@ impl<'a> Context<'a> {
     }
     /// unify_internal may mutate the context even with an error.
     /// The context on which it's called should be discarded if there's an error.
-    fn unify_internal(&mut self, t1: &Type<'a>, t2: &Type<'a>) -> Result<(), UnificationError<'a>> {
+    fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
         let t1 = t1.apply(self);
         let t2 = t2.apply(self);
         if t1 == t2 {
@@ -661,7 +659,7 @@ mod parser {
     named!(constructed_simple<CompleteStr, Type>,
         do_parse!(
             name: alpha >>
-            (Type::Constructed(name.0, vec![]))
+            (Type::Constructed(leaky_str(name.0), vec![]))
     ));
     named!(constructed_complex<CompleteStr, Type>,
         do_parse!(
@@ -671,7 +669,7 @@ mod parser {
                 separated_list!(tag!(","), ws!(tp)),
                 tag!(")")
             ) >>
-            (Type::Constructed(name.0, args))
+            (Type::Constructed(leaky_str(name.0), args))
     ));
     named!(arrow<CompleteStr, Type>,
         do_parse!(
@@ -688,5 +686,9 @@ mod parser {
             Ok((_, t)) => Ok(t),
             _ => Err(()),
         }
+    }
+
+    fn leaky_str(s: &str) -> &'static str {
+        unsafe { &mut *Box::into_raw(s.to_string().into_boxed_str()) }
     }
 }
