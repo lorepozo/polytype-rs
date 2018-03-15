@@ -6,9 +6,12 @@ rust:
   - nightly
 script:
   - cargo build --verbose
-  - cargo test --verbose
-  - cargo doc
+  - cargo test  --verbose
+  - cargo doc   --verbose
 matrix:
+  fast_failures: true
+  allow_failures:
+    - env: KCOV=1
   include:
     - rust: nightly-2018-03-06
       env:
@@ -19,3 +22,22 @@ matrix:
       script:
         - cargo fmt -- --write-mode=diff
         - cargo clippy
+    - env: KCOV=1
+      sudo: required # travis-ci/travis-ci#9061
+      before_script:
+        - cargo install cargo-update || echo "cargo-update already installed"
+        - cargo install cargo-travis || echo "cargo-travis already installed"
+        - cargo install-update -a
+      script:
+        - |
+          cargo build    --verbose &&
+          cargo coverage --verbose &&
+          bash <(curl -s https://codecov.io/bash) -s target/kcov
+      addons: # required for kcov
+        apt:
+          packages:
+            - libcurl4-openssl-dev
+            - libelf-dev
+            - libdw-dev
+            - binutils-dev
+            - cmake
