@@ -1,4 +1,5 @@
-/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenience for nested arrows).
+/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenience for nested
+/// arrows).
 ///
 /// This is equivalent to:
 ///
@@ -41,15 +42,13 @@
 macro_rules! arrow {
     [$x:expr] => ($x);
     [$x:expr, $($xs:expr),*] => (
-        $crate::Type::Arrow(Box::new($crate::Arrow {
-            arg: $x,
-            ret: arrow!($($xs),+),
-        }))
+        $crate::Type::arrow($x, arrow!($($xs),+),)
     );
     [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
 }
 
-/// Creates a [`Type::Constructed`] or [`Type::Variable`][] (convenience for common pattern).
+/// Creates a [`Type::Constructed`] or [`Type::Variable`][] (convenience for
+/// common pattern).
 ///
 /// ```rust,ignore
 /// // equivalent to:
@@ -137,4 +136,64 @@ macro_rules! tp {
     };
     ($n:ident($($x:expr,)*)) => (tp!($n($($x),*)));
     ($n:expr) => ($crate::Type::Variable($n));
+}
+
+
+/// Creates a [`Polytype::Binding`] or [`Polytype::Monotype`][] (convenience for
+/// common pattern).
+///
+/// ```rust,ignore
+/// // equivalent to:
+/// Polytype::Binding(ident, tp)
+/// // or
+/// Polytype::Monotype(tp)
+/// ```
+///
+/// # Examples
+///
+/// Make a monotype:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::{Type, Polytype};
+/// # fn main() {
+/// let t = ptp!(tp!(int));
+/// assert_eq!(format!("{}", t), "int");
+/// // equivalent to:
+/// let t_eq = Polytype::Monotype(Type::Constructed("int", vec![]));
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// Make a bound type:
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::{Type, Polytype};
+/// # fn main() {
+/// let t = ptp!(0, arrow![tp!(0), tp!(0)]);
+/// assert_eq!(format!("{}", t), "∀t0. t0 → t0");
+/// // equivalent to:
+/// let t_eq = Polytype::Binding{
+///     variable: 0,
+///     body: Box::new(
+///         Polytype::Monotype(
+///             Type::Constructed("→",
+///                               vec![Type::Variable(0),
+///                                    Type::Variable(0)])))};
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// [`Polytype::Binding`]: enum.Polytype.html#variant.Binding
+/// [`Polytype::Monotype`]: enum.Polytype.html#variant.Monotype
+#[macro_export]
+macro_rules! ptp {
+    ($n:expr, $t:expr) => {
+        $crate::Polytype::Binding{
+            variable: $n,
+            body: Box::new(ptp!($t)),
+        }
+    };
+    ($t:expr) => ($crate::Polytype::Monotype($t));
 }
