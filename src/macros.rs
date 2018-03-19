@@ -35,7 +35,9 @@
 macro_rules! arrow {
     [$x:expr] => ($x);
     [$x:expr, $($xs:expr),*] => (
-        $crate::Type::arrow($x, arrow!($($xs),+),)
+        match ($x, arrow![$($xs),+]) {
+            (arg, ret) => $crate::Type::arrow(arg, ret)
+        }
     );
     [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
 }

@@ -20,16 +20,20 @@ fn variables(tp: &Type) -> Vec<u32> {
 
 #[test]
 fn test_arrow_macro() {
-    assert_eq!(arrow!(Type::Variable(0)), Type::Variable(0));
+    assert_eq!(arrow![Type::Variable(0)], Type::Variable(0));
+    let arg = Type::Variable(0);
+    let ret = Type::Variable(1);
+    let t = arrow![arg, ret];
+    assert_eq!(t, arrow![Type::Variable(0), Type::Variable(1)]);
     assert_eq!(
-        arrow!(Type::Variable(0), Type::Variable(1), Type::Variable(2)),
+        arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)],
         Type::arrow(
             Type::Variable(0),
             Type::arrow(Type::Variable(1), Type::Variable(2))
         )
     );
     assert_eq!(
-        arrow!(
+        arrow![
             Type::Variable(0),
             Type::Variable(1),
             Type::Variable(2),
