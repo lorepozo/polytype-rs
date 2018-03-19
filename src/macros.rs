@@ -1,43 +1,36 @@
-/// Creates a [`Type::Arrow`] of `tp0 → tp1 → ...` (convenience for nested
+/// Creates an [`arrow`] of `tp0 → tp1 → ...` (convenience for nested
 /// arrows).
 ///
 /// This is equivalent to:
 ///
 /// ```rust,ignore
-/// Type::Arrow(Box::new(Arrow {
-///     arg: tp0,
-///     ret: Type::Arrow(Box::new(Arrow {
-///         arg: tp1,
-///         ret: Type::Arrow(Box::new(Arrow {
-///             arg: tp2,
-///             ...
-///         })),
-///     })),
-/// }))
+/// Type::arrow(tp0,
+///             Type::arrow(tp1,
+///                         Type::arrow(tp2,
+///                         ...
+///                         )
+///             )
+/// )
 /// ```
 ///
 /// # Examples
 ///
 /// ```
 /// #[macro_use] extern crate polytype;
-/// use polytype::{Arrow, Type};
+/// use polytype::{Type};
 ///
 /// # fn main() {
 /// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
 /// assert_eq!(format!("{}", t), "t0 → t1 → t2");
 /// // equivalent to:
-/// let t_eq = Type::Arrow(Box::new(Arrow{
-///     arg: Type::Variable(0),
-///     ret: Type::Arrow(Box::new(Arrow{
-///         arg: Type::Variable(1),
-///         ret: Type::Variable(2),
-///     })),
-/// }));
+/// let t_eq = Type::arrow(Type::Variable(0),
+///                        Type::arrow(Type::Variable(1),
+///                                    Type::Variable(2)));
 /// assert_eq!(t, t_eq);
 /// # }
 /// ```
 ///
-/// [`Type::Arrow`]: enum.Type.html#variant.Arrow
+/// [`arrow`]: enum.Type.html#method.arrow
 #[macro_export]
 macro_rules! arrow {
     [$x:expr] => ($x);
@@ -138,7 +131,6 @@ macro_rules! tp {
     ($n:expr) => ($crate::Type::Variable($n));
 }
 
-
 /// Creates a [`Polytype::Binding`] or [`Polytype::Monotype`][] (convenience for
 /// common pattern).
 ///
@@ -171,7 +163,7 @@ macro_rules! tp {
 /// # #[macro_use] extern crate polytype;
 /// # use polytype::{Type, Polytype};
 /// # fn main() {
-/// let t = ptp!(0, arrow![tp!(0), tp!(0)]);
+/// let t = ptp!(0, ptp!(arrow![tp!(0), tp!(0)]));
 /// assert_eq!(format!("{}", t), "∀t0. t0 → t0");
 /// // equivalent to:
 /// let t_eq = Polytype::Binding{
@@ -192,7 +184,7 @@ macro_rules! ptp {
     ($n:expr, $t:expr) => {
         $crate::Polytype::Binding{
             variable: $n,
-            body: Box::new(ptp!($t)),
+            body: Box::new($t),
         }
     };
     ($t:expr) => ($crate::Polytype::Monotype($t));
