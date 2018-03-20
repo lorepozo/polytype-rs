@@ -259,11 +259,11 @@ impl Type {
         Type::Constructed("→", vec![alpha, beta])
     }
     /// `true` if `Type` is an arrow type else `false`.
-    pub fn is_arrow(&self) -> bool {
-        if let &Type::Constructed("→", ..) = self {
-            true
+    pub fn as_arrow(&self) -> Option<(&Type, &Type)> {
+        if let &Type::Constructed("→", ref args) = self {
+            Some((&args[0], &args[1]))
         } else {
-            false
+            None
         }
     }
     fn occurs(&self, v: Variable) -> bool {
