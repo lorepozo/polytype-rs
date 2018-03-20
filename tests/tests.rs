@@ -1,26 +1,7 @@
 extern crate polytype;
 
 use polytype::*;
-use std::collections::{HashMap, VecDeque};
-
-fn find_variables(tp: &Type, o: &mut Vec<u32>) {
-    match *tp {
-        Type::Arrow(ref arr) => {
-            find_variables(&arr.arg, o);
-            find_variables(&arr.ret, o)
-        }
-        Type::Constructed(_, ref args) => for arg in args {
-            find_variables(arg, o)
-        },
-        Type::Variable(v) => o.push(v),
-    }
-}
-
-fn variables(tp: &Type) -> Vec<u32> {
-    let mut v = vec![];
-    find_variables(tp, &mut v);
-    v
-}
+use std::collections::VecDeque;
 
 #[test]
 fn test_arrow_macro() {
@@ -31,13 +12,10 @@ fn test_arrow_macro() {
     assert_eq!(t, arrow![Type::Variable(0), Type::Variable(1)]);
     assert_eq!(
         arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)],
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Variable(2),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(Type::Variable(1), Type::Variable(2))
+        )
     );
     assert_eq!(
         arrow![
@@ -46,16 +24,13 @@ fn test_arrow_macro() {
             Type::Variable(2),
             Type::Variable(3),
         ],
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Arrow(Box::new(Arrow {
-                    arg: Type::Variable(2),
-                    ret: Type::Variable(3),
-                })),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(
+                Type::Variable(1),
+                Type::arrow(Type::Variable(2), Type::Variable(3))
+            )
+        )
     );
 }
 
@@ -101,15 +76,44 @@ fn test_tp_macro() {
             "hashmap",
             vec![
                 Type::Constructed("str", vec![]),
-                Type::Arrow(Box::new(Arrow {
-                    arg: Type::Constructed("int", vec![]),
-                    ret: Type::Arrow(Box::new(Arrow {
-                        arg: Type::Variable(0),
-                        ret: Type::Constructed("bool", vec![]),
-                    })),
-                })),
+                Type::arrow(
+                    Type::Constructed("int", vec![]),
+                    Type::arrow(Type::Variable(0), Type::Constructed("bool", vec![])),
+                ),
             ]
         )
+    );
+}
+
+#[test]
+fn test_ptp_macro() {
+    assert_eq!(
+        ptp!(tp!(bool)),
+        TypeSchema::Monotype(Type::Constructed("bool", vec![]))
+    );
+    assert_eq!(
+        ptp!(tp!(list(tp!(bool)))),
+        TypeSchema::Monotype(Type::Constructed(
+            "list",
+            vec![Type::Constructed("bool", vec![])]
+        ))
+    );
+    assert_eq!(
+        ptp!(0; tp!(0)),
+        TypeSchema::Polytype {
+            variable: 0,
+            body: Box::new(TypeSchema::Monotype(Type::Variable(0))),
+        }
+    );
+    assert_eq!(
+        ptp!(0; arrow![tp!(0), tp!(0)]),
+        TypeSchema::Polytype {
+            variable: 0,
+            body: Box::new(TypeSchema::Monotype(Type::Constructed(
+                "→",
+                vec![Type::Variable(0), Type::Variable(0)]
+            ))),
+        }
     );
 }
 
@@ -117,29 +121,12 @@ fn test_tp_macro() {
 fn test_arrow_methods() {
     let t0 = Type::Variable(0);
     let t1 = Type::Constructed("int", vec![]);
-    let t2 = Type::Arrow(Box::new(Arrow {
-        arg: t0.clone(),
-        ret: t1.clone(),
-    }));
-    let ta1 = Type::Arrow(Box::new(Arrow {
-        arg: t2.clone(),
-        ret: Type::Arrow(Box::new(Arrow {
-            arg: t1.clone(),
-            ret: t0.clone(),
-        })),
-    }));
-    let ta2 = Arrow {
-        arg: t2.clone(),
-        ret: Type::Arrow(Box::new(Arrow {
-            arg: t1.clone(),
-            ret: t0.clone(),
-        })),
-    }.into();
-    let ta3 = arrow![t2.clone(), t1.clone(), t0.clone()];
-    let ta4 = arrow![arrow![tp!(0), tp!(int)], tp!(int), tp!(0)];
-    assert_eq!(ta4, ta1);
-    assert_eq!(ta4, ta2);
-    assert_eq!(ta4, ta3);
+    let t2 = Type::arrow(t0.clone(), t1.clone());
+    let ta1 = Type::arrow(t2.clone(), Type::arrow(t1.clone(), t0.clone()));
+    let ta2 = arrow![t2.clone(), t1.clone(), t0.clone()];
+    let ta3 = arrow![arrow![tp!(0), tp!(int)], tp!(int), tp!(0)];
+    assert_eq!(ta3, ta1);
+    assert_eq!(ta3, ta2);
 }
 
 #[test]
@@ -151,40 +138,28 @@ fn test_tp_from_vecdeque() {
 
     tps.push_back(Type::Variable(1));
     let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Variable(1),
-        }))
-    );
+    assert_eq!(tp, Type::arrow(Type::Variable(0), Type::Variable(1)));
 
     tps.push_back(Type::Variable(2));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Variable(2),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(Type::Variable(1), Type::Variable(2))
+        )
     );
     tps.push_back(Type::Variable(3));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Arrow(Box::new(Arrow {
-                    arg: Type::Variable(2),
-                    ret: Type::Variable(3),
-                })),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(
+                Type::Variable(1),
+                Type::arrow(Type::Variable(2), Type::Variable(3))
+            )
+        )
     );
 }
 
@@ -197,40 +172,28 @@ fn test_tp_from_vec() {
 
     tps.push(Type::Variable(1));
     let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Variable(1),
-        }))
-    );
+    assert_eq!(tp, Type::arrow(Type::Variable(0), Type::Variable(1)));
 
     tps.push(Type::Variable(2));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Variable(2),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(Type::Variable(1), Type::Variable(2))
+        )
     );
     tps.push(Type::Variable(3));
     let tp: Type = tps.clone().into();
     assert_eq!(
         tp,
-        Type::Arrow(Box::new(Arrow {
-            arg: Type::Variable(0),
-            ret: Type::Arrow(Box::new(Arrow {
-                arg: Type::Variable(1),
-                ret: Type::Arrow(Box::new(Arrow {
-                    arg: Type::Variable(2),
-                    ret: Type::Variable(3),
-                })),
-            })),
-        }))
+        Type::arrow(
+            Type::Variable(0),
+            Type::arrow(
+                Type::Variable(1),
+                Type::arrow(Type::Variable(2), Type::Variable(3))
+            )
+        )
     );
 }
 
@@ -262,45 +225,6 @@ fn test_unify_both_sides_polymorphic_occurs() {
     let mut ctx = Context::default();
     ctx.unify(&tp!(0), &tp!(list(arrow![tp!(0), tp!(bool)])))
         .expect_err("circular polymorphic types");
-}
-
-#[test]
-fn test_instantiate() {
-    let mut ctx = Context::default();
-    let mut bindings = HashMap::new();
-    let dummy = tp!(dummy(tp!(list(tp!(int))), tp!(list(tp!(3)))));
-    ctx.unify(&tp!(1), &dummy).expect("unify on empty context");
-
-    let t1 = tp!(list(arrow![tp!(int), tp!(2)])).instantiate(&mut ctx, &mut bindings);
-    let t2 = tp!(list(arrow![tp!(2), tp!(bool)])).instantiate(&mut ctx, &mut bindings);
-    let t3 = tp!(list(tp!(3))).instantiate(&mut ctx, &mut bindings);
-
-    // type variables start at 0
-    assert_eq!(&bindings[&2], &tp!(0));
-    assert_eq!(&bindings[&3], &tp!(1));
-    // like replaces like
-    assert_eq!(variables(&t1), variables(&t2));
-    // substitutions are not made
-    assert_eq!(t3, tp!(list(tp!(1))));
-    // context is updated
-    assert_eq!(ctx.new_variable(), tp!(2));
-    assert_eq!(ctx.substitutions().get(&1).unwrap(), &dummy);
-    assert_eq!(ctx.substitutions().len(), 1);
-}
-
-#[test]
-fn test_canonicalize() {
-    let mut bindings = HashMap::new();
-    let t1 = tp!(list(arrow![tp!(int), tp!(2)])).canonical(&mut bindings);
-    let t2 = tp!(list(arrow![tp!(2), tp!(bool)])).canonical(&mut bindings);
-    let t3 = tp!(list(tp!(3))).canonical(&mut bindings);
-
-    // type variables start at 0
-    assert_eq!(&bindings[&2], &tp!(0));
-    assert_eq!(&bindings[&3], &tp!(1));
-    // like replaces like
-    assert_eq!(variables(&t1), variables(&t2));
-    assert_eq!(t3, tp!(list(tp!(1))));
 }
 
 #[test]
