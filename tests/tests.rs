@@ -123,12 +123,10 @@ fn test_arrow_methods() {
     let t1 = Type::Constructed("int", vec![]);
     let t2 = Type::arrow(t0.clone(), t1.clone());
     let ta1 = Type::arrow(t2.clone(), Type::arrow(t1.clone(), t0.clone()));
-    let ta2 = Type::arrow(t2.clone(), Type::arrow(t1.clone(), t0.clone())).into();
-    let ta3 = arrow![t2.clone(), t1.clone(), t0.clone()];
-    let ta4 = arrow![arrow![tp!(0), tp!(int)], tp!(int), tp!(0)];
-    assert_eq!(ta4, ta1);
-    assert_eq!(ta4, ta2);
-    assert_eq!(ta4, ta3);
+    let ta2 = arrow![t2.clone(), t1.clone(), t0.clone()];
+    let ta3 = arrow![arrow![tp!(0), tp!(int)], tp!(int), tp!(0)];
+    assert_eq!(ta3, ta1);
+    assert_eq!(ta3, ta2);
 }
 
 #[test]

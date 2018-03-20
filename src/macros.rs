@@ -183,11 +183,13 @@ macro_rules! tp {
 /// [`TypeSchema::Monotype`]: enum.TypeSchema.html#variant.Monotype
 #[macro_export]
 macro_rules! ptp {
-    ($n:expr, $t:expr) => {
-        $crate::TypeSchema::Polytype{
+    ($n: expr, $t: expr) => {
+        $crate::TypeSchema::Polytype {
             variable: $n,
             body: Box::new($t),
         }
     };
-    ($t:expr) => ($crate::TypeSchema::Monotype($t));
+    ($t: expr) => {
+        $crate::TypeSchema::Monotype($t)
+    };
 }

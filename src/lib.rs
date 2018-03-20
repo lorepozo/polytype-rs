@@ -324,7 +324,7 @@ impl Type {
     }
     /// `true` if `Type` is an arrow type else `false`.
     pub fn as_arrow(&self) -> Option<(&Type, &Type)> {
-        if let &Type::Constructed("→", ref args) = self {
+        if let Type::Constructed("→", ref args) = *self {
             Some((&args[0], &args[1]))
         } else {
             None
@@ -352,7 +352,7 @@ impl Type {
         }
     }
     /// show specifically for arrow types
-    fn arrow_show(args: &Vec<Type>, is_return: bool) -> String {
+    fn arrow_show(args: &[Type], is_return: bool) -> String {
         if is_return {
             format!("{} → {}", args[0].show(false), args[1].show(true))
         } else {
@@ -362,21 +362,19 @@ impl Type {
     /// Optionally return the arguments of an arrow.
     pub fn args(&self) -> Option<VecDeque<&Type>> {
         match *self {
-            Type::Variable(_) => None,
             Type::Constructed("→", ref args) => {
-                let mut tps = args[1].args().unwrap_or(VecDeque::new());
+                let mut tps = args[1].args().unwrap_or_default();
                 tps.push_front(&args[0]);
                 Some(tps)
             }
-            Type::Constructed(..) => None,
+            Type::Variable(_) | Type::Constructed(..) => None,
         }
     }
     /// Optionally return the return type of an arrow.
     pub fn returns(&self) -> Option<&Type> {
         match *self {
-            Type::Variable(_) => None,
-            Type::Constructed("→", ref args) => args[1].returns().or(Some(&args[1])),
-            Type::Constructed(..) => None,
+            Type::Constructed("→", ref args) => args[1].returns().or_else(|| Some(&args[1])),
+            Type::Variable(_) | Type::Constructed(..) => None,
         }
     }
     /// Applies the type in a [`Context`].
@@ -467,9 +465,9 @@ impl Type {
     pub fn generalize(&self, ctx: &Context) -> TypeSchema {
         let fvs = self.free_vars(ctx);
         let mut t = TypeSchema::Monotype(self.clone());
-        for v in fvs.iter() {
+        for v in &fvs {
             t = TypeSchema::Polytype {
-                variable: v.clone(),
+                variable: *v,
                 body: Box::new(t),
             };
         }
@@ -796,14 +794,14 @@ mod parser {
                      tag!("t") >>
                      variable: map_res!(digit, nom_u32) >>
                      ws!(tag!(".")) >>
-                     body: map!(polytype, |p| Box::new(p)) >>
+                     body: map!(polytype, Box::new) >>
                      (TypeSchema::Polytype{variable, body}))
     );
     named!(monotype<CompleteStr, Type>,
            alt!(arrow | var | constructed_complex | constructed_simple)
     );
     named!(polytype<CompleteStr, TypeSchema>,
-           alt!(map!(monotype, |t| TypeSchema::Monotype(t)) | binding)
+           alt!(map!(monotype, TypeSchema::Monotype) | binding)
     );
 
     pub fn parse(input: &str) -> Result<Type, ()> {
