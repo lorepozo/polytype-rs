@@ -227,29 +227,6 @@ fn test_unify_both_sides_polymorphic_occurs() {
         .expect_err("circular polymorphic types");
 }
 
-// #[test]
-// fn test_instantiate() {
-//     let mut ctx = Context::default();
-//     let dummy = tp!(dummy(tp!(list(tp!(int))), tp!(list(tp!(3)))));
-//     ctx.unify(&tp!(1), &dummy).expect("unify on empty context");
-//
-//     let t1 = tp!(list(arrow![tp!(int), tp!(2)])).instantiate(&mut ctx);
-//     let t2 = tp!(list(arrow![tp!(2), tp!(bool)])).instantiate(&mut ctx);
-//     let t3 = tp!(list(tp!(3))).instantiate(&mut ctx);
-//
-//     // type variables start at 0
-//     assert_eq!(&bindings[&2], &tp!(0));
-//     assert_eq!(&bindings[&3], &tp!(1));
-//     // like replaces like
-//     assert_eq!(variables(&t1), variables(&t2));
-//     // substitutions are not made
-//     assert_eq!(t3, tp!(list(tp!(1))));
-//     // context is updated
-//     assert_eq!(ctx.new_variable(), tp!(2));
-//     assert_eq!(ctx.substitutions().get(&1).unwrap(), &dummy);
-//     assert_eq!(ctx.substitutions().len(), 1);
-// }
-
 #[test]
 fn test_parse() {
     let t = tp!(int);

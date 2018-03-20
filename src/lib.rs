@@ -1,5 +1,4 @@
-//! A [Hindley-Milner polymorphic typing
-//! system](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system).
+//! A [Hindley-Milner polymorphic typing system].
 //!
 //! For brevity, the documentation heavily uses the three provided macros when
 //! creating types.
@@ -20,16 +19,15 @@
 //!     tp!(list(tp!(0))),
 //! ]);
 //!
-//! // quantified types provide polymorphic behavior.
+//! // Quantified type schemas provide polymorphic behavior.
 //! assert_eq!(format!("{}", &t), "∀t0. (t0 → bool) → list(t0) → list(t0)");
-//! assert!(t.as_polymorphic().is_some());
 //!
-//! // we can instantiate types to remove quantifiers
+//! // We can instantiate type schemas to remove quantifiers
 //! let mut ctx = Context::default();
 //! let t = t.instantiate(&mut ctx);
 //! assert_eq!(format!("{}", &t), "(t0 → bool) → list(t0) → list(t0)");
 //!
-//! // we can substitute for t0 using unification in a type Context:
+//! // We can substitute for t0 using unification in a type Context:
 //! ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
 //! let t = t.apply(&ctx);
 //! assert_eq!(format!("{}", &t), "(int → bool) → list(int) → list(int)");
@@ -44,7 +42,7 @@
 //!
 //! # fn main() {
 //! // reduce: ∀α. ∀β. (β → α → β) → β → [α] → β
-//! // We can represent the type of reduce using the included typing macros:
+//! // We can represent the type schema of reduce using the included macros:
 //! // tp!, ptp!, and arrow!.
 //! let t = ptp!(0, 1; arrow![
 //!     arrow![tp!(1), tp!(0), tp!(1)],
@@ -54,24 +52,21 @@
 //! ]);
 //! assert_eq!(format!("{}", &t), "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
-//! // reduce is polymorphic
-//! assert!(t.as_polymorphic().is_some());
+//! // Let's consider reduce when applied to a function that adds two ints
 //!
-//! // let's consider reduce when applied to a function that adds two ints
-//!
-//! // first, let's create a type representing binary addition.
+//! // First, let's create a type representing binary addition.
 //! let tplus = arrow![tp!(int), tp!(int), tp!(int)];
 //! assert_eq!(format!("{}", &tplus), "int → int → int");
 //!
-//! // let's also create a new typing context to manage typing bookkeeping.
+//! // Let's also create a new typing context to manage typing bookkeeping.
 //! let mut ctx = Context::default();
 //!
-//! // then, let's instantiate the polymorphic type of reduce within our context
+//! // Then, let's instantiate the type schema of reduce within our context
 //! // so new type variables will be distinct
 //! let t = t.instantiate(&mut ctx);
 //! assert_eq!(format!("{}", &t), "(t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
-//! // by unifying, we can ensure function applications obey type requirements.
+//! // By unifying, we can ensure function applications obey type requirements.
 //! let treturn = ctx.new_variable();
 //! let targ1 = ctx.new_variable();
 //! let targ2 = ctx.new_variable();
@@ -85,16 +80,18 @@
 //!     ],
 //! ).expect("unifies");
 //!
-//! // we can also now infer what arguments are needed and what gets returned
+//! // We can also now infer what arguments are needed and what gets returned
 //! assert_eq!(targ1.apply(&ctx), tp!(int));             // inferred arg 1: int
 //! assert_eq!(targ2.apply(&ctx), tp!(list(tp!(int))));  // inferred arg 2: int
 //! assert_eq!(treturn.apply(&ctx), tp!(int));           // inferred return: int
 //!
-//! // finally, we can see what form reduce takes
+//! // Finally, we can see what form reduce takes
 //! let t = t.apply(&ctx);
 //! assert_eq!(format!("{}", &t), "(int → int → int) → int → list(int) → int");
 //! # }
 //! ```
+//!
+//! [Hindley-Milner polymorphic typing system]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
 
 extern crate itertools;
 #[macro_use]
@@ -105,55 +102,46 @@ mod macros;
 
 use itertools::Itertools;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
-/// Represents a [type
-/// variable](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Free_type_variables)
-/// (an unknown type)
+/// Represents a [type variable][1] (an unknown type).
+///
+/// [1]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Free_type_variables
 pub type Variable = u32;
 
-/// Represents
-/// [polytypes](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Polytypes)
-/// (uninstantiated, universally quantified types).
+/// Represents [polytypes][1] (uninstantiated, universally quantified types).
+///
+/// [1]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Polytypes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum TypeSchema {
     /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
     Monotype(Type),
     /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
     Polytype {
-        /// the [`Variable`] being bound
+        /// The [`Variable`] being bound
+        ///
         /// [`Variable`]: type.Variable.html
         variable: Variable,
-        /// the type in which `variable` is bound
+        /// The type in which `variable` is bound
         body: Box<TypeSchema>,
     },
 }
 impl TypeSchema {
-    /// Optionally deconstruct a [`Polytype`].
-    ///
-    /// [`Polytype`]: enum.TypeScheme.html#variant.Polytype
-    pub fn as_polymorphic(&self) -> Option<(Variable, &TypeSchema)> {
-        match *self {
-            TypeSchema::Monotype(_) => None,
-            TypeSchema::Polytype { variable, ref body } => Some((variable, body)),
-        }
-    }
-    /// Returns a set of each [`Variable`] bound by the [`TypeScheme`].
+    /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
     ///
     /// [`Variable`]: type.Variable.html
-    /// [`TypeScheme`]: enum.TypeScheme.html
-    pub fn bound_variables(&self) -> HashSet<Variable> {
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn bound_variables(&self) -> Vec<Variable> {
         match *self {
-            TypeSchema::Monotype(_) => HashSet::new(),
+            TypeSchema::Monotype(_) => vec![],
             TypeSchema::Polytype { variable, ref body } => {
                 let mut bvs = body.bound_variables();
-                bvs.insert(variable);
+                bvs.push(variable);
                 bvs
             }
         }
     }
-    /// `true` if `v` is bound, otherwise `false`
     pub fn is_bound(&self, v: Variable) -> bool {
         match *self {
             TypeSchema::Monotype(_) => false,
@@ -161,21 +149,21 @@ impl TypeSchema {
             TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
         }
     }
-    /// returns a set of each free [`Variable`] in the [`TypeScheme`].
+    /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
     ///
     /// [`Variable`]: type.Variable.html
-    /// [`TypeScheme`]: enum.TypeScheme.html
-    pub fn free_vars(&self, ctx: &Context) -> HashSet<Variable> {
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
         match *self {
             TypeSchema::Monotype(ref t) => t.free_vars(ctx),
             TypeSchema::Polytype { variable, ref body } => {
                 let mut fvs = body.free_vars(ctx);
-                fvs.remove(&variable);
+                fvs.retain(|&v| v != variable);
                 fvs
             }
         }
     }
-    /// the work of instantiation happens here.
+    /// The work of instantiation happens here.
     fn instantiate_helper(
         &self,
         ctx: &mut Context,
@@ -191,7 +179,7 @@ impl TypeSchema {
             }
         }
     }
-    /// Instantiate a type in the context by removing quantifiers.
+    /// Instantiate a [`TypeSchema`] in the context by removing quantifiers.
     ///
     /// All type variables will be replaced with fresh type variables.
     ///
@@ -212,6 +200,8 @@ impl TypeSchema {
     /// assert_eq!(format!("{}", &t2), "list(t1)");
     /// # }
     /// ```
+    ///
+    /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn instantiate(&self, ctx: &mut Context) -> Type {
         self.instantiate_helper(ctx, &mut HashMap::new())
     }
@@ -251,12 +241,12 @@ impl fmt::Display for TypeSchema {
     }
 }
 
-/// Represents
-/// [monotypes](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Monotypes)
-/// (fully instantiated, unquantified types).
+/// Represents [monotypes][1] (fully instantiated, unquantified types).
+///
+/// [1]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Monotypes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type {
-    /// primitive or composite types (e.g. `int`, `List(α)`, `α → β`)
+    /// Primitive or composite types (e.g. `int`, `List(α)`, `α → β`)
     ///
     /// # Examples
     ///
@@ -287,7 +277,7 @@ pub enum Type {
     /// # }
     /// ```
     Constructed(&'static str, Vec<Type>),
-    /// type variables (e.g. `α`, `β`) identified by de Bruin indices.
+    /// Type variables (e.g. `α`, `β`) identified by de Bruin indices.
     ///
     /// # Examples
     ///
@@ -318,11 +308,11 @@ pub enum Type {
     Variable(Variable),
 }
 impl Type {
-    /// shortcut for constructing function types (i.e. `alpha` → `beta`).
+    /// Shortcut for constructing function types (i.e. `alpha` → `beta`).
     pub fn arrow(alpha: Type, beta: Type) -> Type {
         Type::Constructed("→", vec![alpha, beta])
     }
-    /// `true` if `Type` is an arrow type else `false`.
+    /// If the type is an arrow, get its associated argument and return types.
     pub fn as_arrow(&self) -> Option<(&Type, &Type)> {
         if let Type::Constructed("→", ref args) = *self {
             Some((&args[0], &args[1]))
@@ -351,7 +341,7 @@ impl Type {
             }
         }
     }
-    /// show specifically for arrow types
+    /// Show specifically for arrow types
     fn arrow_show(args: &[Type], is_return: bool) -> String {
         if is_return {
             format!("{} → {}", args[0].show(false), args[1].show(true))
@@ -415,7 +405,7 @@ impl Type {
             }
         }
     }
-    /// perform a substitution
+    /// Perform a substitution.
     ///
     /// # Examples
     ///
@@ -473,7 +463,7 @@ impl Type {
         }
         t
     }
-    /// Compute all the free variables in a type
+    /// Compute all the free variables in a type.
     ///
     /// # Examples
     ///
@@ -481,30 +471,27 @@ impl Type {
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// # use polytype::{Context, Type};
-    /// # use std::collections::HashSet;
     /// let t = arrow![tp!(0), tp!(1)];
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
     /// let mut ctx = Context::default();
     /// ctx.extend(0, tp!(int));
     /// let fvs_computed = t.free_vars(&ctx);
-    /// let fvs_expected = vec![1].into_iter().collect();
+    /// let fvs_expected = vec![1];
     ///
     /// assert_eq!(fvs_computed, fvs_expected);
     /// # }
     /// ```
-    pub fn free_vars(&self, ctx: &Context) -> HashSet<Variable> {
+    pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
         match *self {
             Type::Constructed(_, ref args) => args.iter()
                 .flat_map(|a| a.free_vars(ctx).into_iter())
                 .collect(),
             Type::Variable(v) => {
                 if !ctx.substitution().contains_key(&v) {
-                    let mut s = HashSet::new();
-                    s.insert(v);
-                    s
+                    vec![v]
                 } else {
-                    HashSet::new()
+                    vec![]
                 }
             }
         }

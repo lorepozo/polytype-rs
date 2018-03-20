@@ -22,7 +22,7 @@
 /// # fn main() {
 /// let t = arrow![Type::Variable(0), Type::Variable(1), Type::Variable(2)];
 /// assert_eq!(format!("{}", t), "t0 → t1 → t2");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = Type::arrow(Type::Variable(0),
 ///                        Type::arrow(Type::Variable(1),
 ///                                    Type::Variable(2)));
@@ -46,7 +46,7 @@ macro_rules! arrow {
 /// common pattern).
 ///
 /// ```rust,ignore
-/// // equivalent to:
+/// // Equivalent to:
 /// Type::Constructed(ident, vec![
 ///     tp1,
 ///     tp2,
@@ -66,7 +66,7 @@ macro_rules! arrow {
 /// # fn main() {
 /// let t = tp!(int);
 /// assert_eq!(format!("{}", t), "int");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = Type::Constructed("int", vec![]);
 /// assert_eq!(t, t_eq);
 /// # }
@@ -80,7 +80,7 @@ macro_rules! arrow {
 /// # fn main() {
 /// let t = tp!(0);
 /// assert_eq!(format!("{}", t), "t0");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = Type::Variable(0);
 /// assert_eq!(t, t_eq);
 /// # }
@@ -96,7 +96,7 @@ macro_rules! arrow {
 /// let tstr = tp!(str);
 /// let t = tp!(dict(tstr, tint));
 /// assert_eq!(format!("{}", t), "dict(str,int)");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = Type::Constructed("dict", vec![
 ///     Type::Constructed("str", vec![]),
 ///     Type::Constructed("int", vec![]),
@@ -133,24 +133,19 @@ macro_rules! tp {
     ($n:expr) => ($crate::Type::Variable($n));
 }
 
-/// Creates a [`TypeSchema::Polytype`] or [`TypeSchema::Monotype`][] (convenience for
-/// common pattern).
+/// Creates a [`TypeSchema::Polytype`] or [`TypeSchema::Monotype`][]
+/// (convenience for common pattern).
 ///
 /// ```rust,ignore
-/// // equivalent to:
+/// // Equivalent to:
 /// TypeSchema::Polytype(ident, tp)
-/// // or
+/// // Or
 /// TypeSchema::Monotype(tp)
 /// ```
 ///
-/// *Note:* `ptp!` provides two ways to construct a [`TypeSchema::Polytype`]
-/// that vary in whether how they treat the body of the type:
-/// 1. Separate `ident` from the `tp` with `,` (i.e. a comma) to signify that
-/// `tp` is already a [`TypeSchema`].
-/// 2. Separate `ident` from `tp` with `;` (i.e. a semicolon) to signify that
-/// `tp` should be lifted from being a [`Type`] to a [`TypeSchema`].
-///
-/// See below for more details.
+/// *Note:* The syntax follows `ptp!(0, 1,...n, typeschema)` or `ptp!(0, 1,...n;
+/// type)` where `n` can be any number of quantified variables to be bound. See
+/// below for more details.
 ///
 /// # Examples
 ///
@@ -162,21 +157,22 @@ macro_rules! tp {
 /// # fn main() {
 /// let t = ptp!(tp!(int));
 /// assert_eq!(format!("{}", t), "int");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = TypeSchema::Monotype(Type::Constructed("int", vec![]));
 /// assert_eq!(t, t_eq);
 /// # }
 /// ```
 ///
-/// Make a bound type (without lifting):
+/// Make a bound type (from a [`TypeSchema`]):
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
 /// # use polytype::{Type, TypeSchema};
 /// # fn main() {
-/// let t = ptp!(0, 1, ptp!(arrow![tp!(0), tp!(1), tp!(0)]));
+/// let inner_polytype = ptp!(1; arrow![tp!(0), tp!(1), tp!(0)]);
+/// let t = ptp!(0, inner_polytype);
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = TypeSchema::Polytype{
 ///     variable: 0,
 ///     body: Box::new(
@@ -204,7 +200,7 @@ macro_rules! tp {
 /// # }
 /// ```
 ///
-/// Make a bound type (with lifting):
+/// Make a bound type (from a [`Type`]):
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
@@ -212,7 +208,7 @@ macro_rules! tp {
 /// # fn main() {
 /// let t = ptp!(0; arrow![tp!(0), tp!(0)]);
 /// assert_eq!(format!("{}", t), "∀t0. t0 → t0");
-/// // equivalent to:
+/// // Equivalent to:
 /// let t_eq = TypeSchema::Polytype{
 ///     variable: 0,
 ///     body: Box::new(
@@ -257,10 +253,3 @@ macro_rules! ptp {
         $crate::TypeSchema::Monotype($t)
     };
 }
-
-//    [$x:expr, $($xs:expr),*] => (
-//        match ($x, arrow![$($xs),+]) {
-//            (arg, ret) => $crate::Type::arrow(arg, ret)
-//        }
-//    );
-//    [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
