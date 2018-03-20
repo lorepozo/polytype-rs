@@ -179,15 +179,15 @@ impl TypeSchema {
     fn instantiate_helper(
         &self,
         ctx: &mut Context,
-        bindings: &mut HashMap<Variable, Type>,
+        substitution: &mut HashMap<Variable, Type>,
     ) -> Type {
         match *self {
-            TypeSchema::Monotype(ref t) => t.substitute(bindings),
+            TypeSchema::Monotype(ref t) => t.substitute(substitution),
             TypeSchema::Polytype { variable, ref body } => {
                 if let Type::Variable(v) = ctx.new_variable() {
-                    bindings.insert(variable, Type::Variable(v));
+                    substitution.insert(variable, Type::Variable(v));
                 }
-                body.instantiate_helper(ctx, bindings)
+                body.instantiate_helper(ctx, substitution)
             }
         }
     }
@@ -381,8 +381,8 @@ impl Type {
     }
     /// Applies the type in a [`Context`].
     ///
-    /// This will replace any type variables that have substitutions defined in
-    /// the context.
+    /// This will substitute type variables for the values associated with them
+    /// by the context.
     ///
     /// # Examples
     ///
@@ -408,7 +408,7 @@ impl Type {
                 Type::Constructed(name, args)
             }
             Type::Variable(v) => {
-                if let Some(tp) = ctx.substitutions.get(&v) {
+                if let Some(tp) = ctx.substitution.get(&v) {
                     // hmm... is this right?
                     tp.apply(ctx)
                 } else {
@@ -417,7 +417,7 @@ impl Type {
             }
         }
     }
-    /// Perform a subsitution according to some set of bindings
+    /// perform a substitution
     ///
     /// # Examples
     ///
@@ -429,21 +429,21 @@ impl Type {
     /// let t = arrow![tp!(0), tp!(1)];
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
-    /// let mut bindings = HashMap::new();
-    /// bindings.insert(0, tp!(int));
-    /// bindings.insert(1, tp!(bool));
-    /// let t = t.substitute(&bindings);
+    /// let mut substitution = HashMap::new();
+    /// substitution.insert(0, tp!(int));
+    /// substitution.insert(1, tp!(bool));
+    /// let t = t.substitute(&substitution);
     ///
     /// assert_eq!(format!("{}", t), "int → bool");
     /// # }
     /// ```
-    pub fn substitute(&self, bindings: &HashMap<Variable, Type>) -> Type {
+    pub fn substitute(&self, substitution: &HashMap<Variable, Type>) -> Type {
         match *self {
             Type::Constructed(name, ref args) => {
-                let args = args.iter().map(|t| t.substitute(bindings)).collect();
+                let args = args.iter().map(|t| t.substitute(substitution)).collect();
                 Type::Constructed(name, args)
             }
-            Type::Variable(v) => bindings.get(&v).unwrap_or(&Type::Variable(v)).clone(),
+            Type::Variable(v) => substitution.get(&v).unwrap_or(&Type::Variable(v)).clone(),
         }
     }
     /// Generalizes the type by binding free variables.
@@ -501,7 +501,7 @@ impl Type {
                 .flat_map(|a| a.free_vars(ctx).into_iter())
                 .collect(),
             Type::Variable(v) => {
-                if !ctx.substitutions().contains_key(&v) {
+                if !ctx.substitution().contains_key(&v) {
                     let mut s = HashSet::new();
                     s.insert(v);
                     s
@@ -597,25 +597,25 @@ impl std::error::Error for UnificationError {
 /// Contexts track substitutions and generate fresh type variables.
 #[derive(Debug, Clone)]
 pub struct Context {
-    substitutions: HashMap<Variable, Type>,
+    substitution: HashMap<Variable, Type>,
     next: Variable,
 }
 impl Default for Context {
     fn default() -> Self {
         Context {
-            substitutions: HashMap::new(),
+            substitution: HashMap::new(),
             next: 0,
         }
     }
 }
 impl Context {
-    /// Return a map of bindings managed by the context. Each key is a
+    /// Return the substitution managed by the context. Each key is a
     /// [`Variable`], and each value is a [`Type`].
     ///
     /// [`Type`]: enum.Type.html
     /// [`Variable`]: type.Variable.html
-    pub fn substitutions(&self) -> &HashMap<Variable, Type> {
-        &self.substitutions
+    pub fn substitution(&self) -> &HashMap<Variable, Type> {
+        &self.substitution
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
@@ -623,7 +623,7 @@ impl Context {
     /// [`Type`]: enum.Type.html
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
     pub fn extend(&mut self, v: Variable, t: Type) {
-        self.substitutions.insert(v, t);
+        self.substitution.insert(v, t);
     }
     /// Create a new [`Type::Variable`] from the next unused number.
     ///
