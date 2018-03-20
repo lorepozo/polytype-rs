@@ -3,21 +3,6 @@ extern crate polytype;
 use polytype::*;
 use std::collections::VecDeque;
 
-fn find_variables(tp: &Type, o: &mut Vec<u32>) {
-    match *tp {
-        Type::Constructed(_, ref args) => for arg in args {
-            find_variables(arg, o)
-        },
-        Type::Variable(v) => o.push(v),
-    }
-}
-
-fn variables(tp: &Type) -> Vec<u32> {
-    let mut v = vec![];
-    find_variables(tp, &mut v);
-    v
-}
-
 #[test]
 fn test_arrow_macro() {
     assert_eq!(arrow![Type::Variable(0)], Type::Variable(0));
