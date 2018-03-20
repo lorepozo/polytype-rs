@@ -14,11 +14,11 @@
 //!
 //! # fn main() {
 //! // filter: ∀α. (α → bool) → [α] → [α]
-//! let t = ptp!(0, ptp!(arrow![
+//! let t = ptp!(0; arrow![
 //!     arrow![tp!(0), tp!(bool)],
 //!     tp!(list(tp!(0))),
 //!     tp!(list(tp!(0))),
-//! ]));
+//! ]);
 //!
 //! // quantified types provide polymorphic behavior.
 //! assert_eq!(format!("{}", &t), "∀t0. (t0 → bool) → list(t0) → list(t0)");
@@ -46,12 +46,12 @@
 //! // reduce: ∀α. ∀β. (β → α → β) → β → [α] → β
 //! // We can represent the type of reduce using the included typing macros:
 //! // tp!, ptp!, and arrow!.
-//! let t = ptp!(0, ptp!(1, ptp!(arrow![
+//! let t = ptp!(0, 1; arrow![
 //!     arrow![tp!(1), tp!(0), tp!(1)],
 //!     tp!(1),
 //!     tp!(list(tp!(0))),
 //!     tp!(1),
-//! ])));
+//! ]);
 //! assert_eq!(format!("{}", &t), "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
 //! // reduce is polymorphic
@@ -203,8 +203,8 @@ impl TypeSchema {
     /// # use polytype::Context;
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = ptp!(3, ptp!(tp!(list(tp!(3)))));
-    /// let t2 = ptp!(3, ptp!(tp!(list(tp!(3)))));
+    /// let t1 = ptp!(3; tp!(list(tp!(3))));
+    /// let t2 = ptp!(3; tp!(list(tp!(3))));
     ///
     /// let t1 = t1.instantiate(&mut ctx);
     /// let t2 = t2.instantiate(&mut ctx);
@@ -226,7 +226,7 @@ impl TypeSchema {
     /// # fn main() {
     /// # use polytype::TypeSchema;
     /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
-    /// let t_lit = ptp!(0, ptp!(arrow![tp!(0), tp!(0)]));
+    /// let t_lit = ptp!(0; arrow![tp!(0), tp!(0)]);
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";

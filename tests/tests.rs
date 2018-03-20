@@ -99,14 +99,14 @@ fn test_ptp_macro() {
         ))
     );
     assert_eq!(
-        ptp!(0, ptp!(tp!(0))),
+        ptp!(0; tp!(0)),
         TypeSchema::Polytype {
             variable: 0,
             body: Box::new(TypeSchema::Monotype(Type::Variable(0))),
         }
     );
     assert_eq!(
-        ptp!(0, ptp!(arrow![tp!(0), tp!(0)])),
+        ptp!(0; arrow![tp!(0), tp!(0)]),
         TypeSchema::Polytype {
             variable: 0,
             body: Box::new(TypeSchema::Monotype(Type::Constructed(

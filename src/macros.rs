@@ -143,6 +143,15 @@ macro_rules! tp {
 /// TypeSchema::Monotype(tp)
 /// ```
 ///
+/// *Note:* `ptp!` provides two ways to construct a [`TypeSchema::Polytype`]
+/// that vary in whether how they treat the body of the type:
+/// 1. Separate `ident` from the `tp` with `,` (i.e. a comma) to signify that
+/// `tp` is already a [`TypeSchema`].
+/// 2. Separate `ident` from `tp` with `;` (i.e. a semicolon) to signify that
+/// `tp` should be lifted from being a [`Type`] to a [`TypeSchema`].
+///
+/// See below for more details.
+///
 /// # Examples
 ///
 /// Make a monotype:
@@ -159,37 +168,99 @@ macro_rules! tp {
 /// # }
 /// ```
 ///
-/// Make a bound type:
+/// Make a bound type (without lifting):
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
 /// # use polytype::{Type, TypeSchema};
 /// # fn main() {
-/// let t = ptp!(0, ptp!(arrow![tp!(0), tp!(0)]));
+/// let t = ptp!(0, 1, ptp!(arrow![tp!(0), tp!(1), tp!(0)]));
+/// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
+/// // equivalent to:
+/// let t_eq = TypeSchema::Polytype{
+///     variable: 0,
+///     body: Box::new(
+///         TypeSchema::Polytype{
+///             variable: 1,
+///             body: Box::new(
+///                 TypeSchema::Monotype(
+///                     Type::Constructed(
+///                         "→",
+///                         vec![Type::Variable(0),
+///                              Type::Constructed(
+///                                  "→",
+///                                  vec![Type::Variable(1),
+///                                       Type::Variable(0)
+///                                  ]
+///                              )
+///                         ]
+///                     )
+///                 )
+///             )
+///         }
+///     )
+/// };
+/// assert_eq!(t, t_eq);
+/// # }
+/// ```
+///
+/// Make a bound type (with lifting):
+///
+/// ```
+/// # #[macro_use] extern crate polytype;
+/// # use polytype::{Type, TypeSchema};
+/// # fn main() {
+/// let t = ptp!(0; arrow![tp!(0), tp!(0)]);
 /// assert_eq!(format!("{}", t), "∀t0. t0 → t0");
 /// // equivalent to:
 /// let t_eq = TypeSchema::Polytype{
 ///     variable: 0,
 ///     body: Box::new(
 ///         TypeSchema::Monotype(
-///             Type::Constructed("→",
-///                               vec![Type::Variable(0),
-///                                    Type::Variable(0)])))};
+///             Type::Constructed(
+///                 "→",
+///                 vec![Type::Variable(0),
+///                      Type::Variable(0)]
+///             )
+///         )
+///     )
+/// };
 /// assert_eq!(t, t_eq);
 /// # }
 /// ```
 ///
 /// [`TypeSchema::Polytype`]: enum.TypeSchema.html#variant.Polytype
 /// [`TypeSchema::Monotype`]: enum.TypeSchema.html#variant.Monotype
+/// [`TypeSchema`]: enum.TypeSchema.html
+/// [`Type`]: enum.Type.html
 #[macro_export]
 macro_rules! ptp {
-    ($n: expr, $t: expr) => {
+    ($n:expr; $body:expr) => {
         $crate::TypeSchema::Polytype {
             variable: $n,
-            body: Box::new($t),
+            body: Box::new(ptp!($body)),
         }
     };
-    ($t: expr) => {
+    ($n:expr, $body:expr) => {
+        $crate::TypeSchema::Polytype {
+            variable: $n,
+            body: Box::new($body),
+        }
+    };
+    ($n:expr, $($tail:tt)+) => {
+        $crate::TypeSchema::Polytype {
+            variable: $n,
+            body: Box::new(ptp!($($tail)+)),
+        }
+    };
+    ($t:expr) => {
         $crate::TypeSchema::Monotype($t)
     };
 }
+
+//    [$x:expr, $($xs:expr),*] => (
+//        match ($x, arrow![$($xs),+]) {
+//            (arg, ret) => $crate::Type::arrow(arg, ret)
+//        }
+//    );
+//    [$x:expr, $($xs:expr,)*] => (arrow![$x, $($xs),*])
