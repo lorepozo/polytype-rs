@@ -38,7 +38,7 @@
 //!
 //! Extended example:
 //!
-//! ```rust
+//! ```
 //! # #[macro_use] extern crate polytype;
 //! use polytype::Context;
 //!
@@ -92,7 +92,7 @@
 //!
 //! // finally, we can see what form reduce takes
 //! let t = t.apply(&ctx);
-//! assert_eq!(format!("{}", t), "(int → int → int) → int → list(int) → int");
+//! assert_eq!(format!("{}", &t), "(int → int → int) → int → list(int) → int");
 //! # }
 //! ```
 
@@ -730,7 +730,7 @@ mod parser {
                    (Type::Constructed(leaky_str(name.0), args)))
     );
     named!(arrow<CompleteStr, Type>,
-               do_parse!(alpha: ws!(alt!(parenthetical |
+           do_parse!(alpha: ws!(alt!(parenthetical |
                                      var |
                                      constructed_complex |
                                      constructed_simple)) >>

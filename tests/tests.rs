@@ -38,7 +38,7 @@ fn test_arrow_macro() {
             Type::Variable(1),
             Type::Variable(2),
             Type::Variable(3),
-        ),
+        ],
         Type::arrow(
             Type::Variable(0),
             Type::arrow(
