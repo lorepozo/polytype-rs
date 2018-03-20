@@ -11,17 +11,18 @@ Implements type inference via unification.
 
 ```toml
 [dependencies]
-polytype = "2.1"
+polytype = "3.0"
 ```
 
 Provided by **`polytype`** are the
-[`Type`](https://docs.rs/polytype/2.1.1/polytype/enum.Type.html) enum and
-[`Context`](https://docs.rs/polytype/2.1.1/polytype/struct.Context.html)
+[`Type`](https://docs.rs/polytype/3.0.0/polytype/enum.TypeSchema.html) and
+[`Type`](https://docs.rs/polytype/3.0.0/polytype/enum.Type.html) enums, the
+[`Context`](https://docs.rs/polytype/3.0.0/polytype/struct.Context.html)
 struct, and the macros
-[`tp!`](https://docs.rs/polytype/2.1.1/polytype/macro.tp.html) and
-[`arrow!`](https://docs.rs/polytype/2.1.1/polytype/macro.arrow.html) which
-help to concisely create
-types.
+[`tp!`](https://docs.rs/polytype/3.0.0/polytype/macro.tp.html),
+[`arrow!`](https://docs.rs/polytype/3.0.0/polytype/macro.arrow.html), and
+[`ptp!`](https://docs.rs/polytype/3.0.0/polytype/macro.ptp.html), which help
+to concisely create types and type schemas.
 
 Unification:
 
@@ -51,35 +52,19 @@ let t = t.apply(&ctx);
 assert_eq!(format!("{}", &t), "list(int)");
 ```
 
-Independent instantiation:
+Instantiate a `TypeSchema`:
 
 ```rust
 let mut ctx = Context::default();
 
-let t1 = tp!(list(tp!(3)));
-let t2 = tp!(list(tp!(3)));
+// ∀α. list(α)
+let schema = ptp!(3; tp!(list(tp!(3))));
 
-let t1 = t1.instantiate_indep(&mut ctx);
-let t2 = t2.instantiate_indep(&mut ctx);
+// They instantiate to new fresh type variables
+let t1 = schema.instantiate(&mut ctx);
+let t2 = schema.instantiate(&mut ctx);
 assert_eq!(format!("{}", &t1), "list(t0)");
 assert_eq!(format!("{}", &t2), "list(t1)");
-```
-
-Dependent instantiation:
-
-```rust
-use std::collections::HashMap;
-
-let mut ctx = Context::default();
-
-let t1 = tp!(list(tp!(3)));
-let t2 = tp!(list(tp!(3)));
-
-let mut bindings = HashMap::new();
-let t1 = t1.instantiate(&mut ctx, &mut bindings);
-let t2 = t2.instantiate(&mut ctx, &mut bindings);
-assert_eq!(format!("{}", &t1), "list(t0)");
-assert_eq!(format!("{}", &t2), "list(t0)");
 ```
 
 See the [documentation](https://docs.rs/polytype) for more details.
