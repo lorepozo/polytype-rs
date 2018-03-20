@@ -133,14 +133,14 @@ macro_rules! tp {
     ($n:expr) => ($crate::Type::Variable($n));
 }
 
-/// Creates a [`Polytype::Binding`] or [`Polytype::Monotype`][] (convenience for
+/// Creates a [`TypeSchema::Polytype`] or [`TypeSchema::Monotype`][] (convenience for
 /// common pattern).
 ///
 /// ```rust,ignore
 /// // equivalent to:
-/// Polytype::Binding(ident, tp)
+/// TypeSchema::Polytype(ident, tp)
 /// // or
-/// Polytype::Monotype(tp)
+/// TypeSchema::Monotype(tp)
 /// ```
 ///
 /// # Examples
@@ -149,12 +149,12 @@ macro_rules! tp {
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
-/// # use polytype::{Type, Polytype};
+/// # use polytype::{Type, TypeSchema};
 /// # fn main() {
 /// let t = ptp!(tp!(int));
 /// assert_eq!(format!("{}", t), "int");
 /// // equivalent to:
-/// let t_eq = Polytype::Monotype(Type::Constructed("int", vec![]));
+/// let t_eq = TypeSchema::Monotype(Type::Constructed("int", vec![]));
 /// assert_eq!(t, t_eq);
 /// # }
 /// ```
@@ -163,15 +163,15 @@ macro_rules! tp {
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
-/// # use polytype::{Type, Polytype};
+/// # use polytype::{Type, TypeSchema};
 /// # fn main() {
 /// let t = ptp!(0, ptp!(arrow![tp!(0), tp!(0)]));
 /// assert_eq!(format!("{}", t), "∀t0. t0 → t0");
 /// // equivalent to:
-/// let t_eq = Polytype::Binding{
+/// let t_eq = TypeSchema::Polytype{
 ///     variable: 0,
 ///     body: Box::new(
-///         Polytype::Monotype(
+///         TypeSchema::Monotype(
 ///             Type::Constructed("→",
 ///                               vec![Type::Variable(0),
 ///                                    Type::Variable(0)])))};
@@ -179,15 +179,15 @@ macro_rules! tp {
 /// # }
 /// ```
 ///
-/// [`Polytype::Binding`]: enum.Polytype.html#variant.Binding
-/// [`Polytype::Monotype`]: enum.Polytype.html#variant.Monotype
+/// [`TypeSchema::Polytype`]: enum.TypeSchema.html#variant.Polytype
+/// [`TypeSchema::Monotype`]: enum.TypeSchema.html#variant.Monotype
 #[macro_export]
 macro_rules! ptp {
     ($n:expr, $t:expr) => {
-        $crate::Polytype::Binding{
+        $crate::TypeSchema::Polytype{
             variable: $n,
             body: Box::new($t),
         }
     };
-    ($t:expr) => ($crate::Polytype::Monotype($t));
+    ($t:expr) => ($crate::TypeSchema::Monotype($t));
 }

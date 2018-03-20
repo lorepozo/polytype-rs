@@ -104,27 +104,27 @@ fn test_tp_macro() {
 fn test_ptp_macro() {
     assert_eq!(
         ptp!(tp!(bool)),
-        Polytype::Monotype(Type::Constructed("bool", vec![]))
+        TypeSchema::Monotype(Type::Constructed("bool", vec![]))
     );
     assert_eq!(
         ptp!(tp!(list(tp!(bool)))),
-        Polytype::Monotype(Type::Constructed(
+        TypeSchema::Monotype(Type::Constructed(
             "list",
             vec![Type::Constructed("bool", vec![])]
         ))
     );
     assert_eq!(
         ptp!(0, ptp!(tp!(0))),
-        Polytype::Binding {
+        TypeSchema::Polytype {
             variable: 0,
-            body: Box::new(Polytype::Monotype(Type::Variable(0))),
+            body: Box::new(TypeSchema::Monotype(Type::Variable(0))),
         }
     );
     assert_eq!(
         ptp!(0, ptp!(arrow![tp!(0), tp!(0)])),
-        Polytype::Binding {
+        TypeSchema::Polytype {
             variable: 0,
-            body: Box::new(Polytype::Monotype(Type::Constructed(
+            body: Box::new(TypeSchema::Monotype(Type::Constructed(
                 "→",
                 vec![Type::Variable(0), Type::Variable(0)]
             ))),

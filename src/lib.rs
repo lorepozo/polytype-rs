@@ -110,31 +110,31 @@ use std::fmt;
 
 /// Represents a [type
 /// variable](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Free_type_variables)
-/// (an unspecified type)
+/// (a particular but unspecified type)
 pub type Variable = u32;
 
 /// Represents
 /// [polytypes](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Polytypes)
-/// (universally quantified types).
+/// (uninstantiated, universally quantified types).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Polytype {
+pub enum TypeSchema {
     /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
     Monotype(Type),
     /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
-    Binding {
+    Polytype {
         /// the [`Variable`] being bound
         /// [`Variable`]: type.Variable.html
         variable: Variable,
         /// the type in which `variable` is bound
-        body: Box<Polytype>,
+        body: Box<TypeSchema>,
     },
 }
-impl Polytype {
+impl TypeSchema {
     /// `true` if the type binds type variables else `false`?
     pub fn is_polymorphic(&self) -> bool {
         match *self {
-            Polytype::Binding { .. } => true,
-            Polytype::Monotype(_) => false,
+            TypeSchema::Polytype { .. } => true,
+            TypeSchema::Monotype(_) => false,
         }
     }
     /// the work of instantiation happens here.
@@ -144,8 +144,8 @@ impl Polytype {
         bindings: &mut HashMap<Variable, Type>,
     ) -> Type {
         match *self {
-            Polytype::Monotype(ref t) => t.substitute(bindings),
-            Polytype::Binding { variable, ref body } => {
+            TypeSchema::Monotype(ref t) => t.substitute(bindings),
+            TypeSchema::Polytype { variable, ref body } => {
                 if let Type::Variable(v) = ctx.new_variable() {
                     bindings.insert(variable, Type::Variable(v));
                 }
@@ -178,24 +178,18 @@ impl Polytype {
         self.instantiate_helper(ctx, &mut HashMap::new())
     }
 }
-impl fmt::Display for Polytype {
+impl fmt::Display for TypeSchema {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            Polytype::Binding { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
-            Polytype::Monotype(ref t) => t.fmt(f),
+            TypeSchema::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
+            TypeSchema::Monotype(ref t) => t.fmt(f),
         }
     }
 }
 
-/// [`Type`] is easier to keyboard, but we provide [`Monotype`] if that helps you maintain the semantic distinction more easily.
-///
-/// [`Type`]: enum.Type.html
-/// [`Monotype`]: type.Monotype.html
-pub type Monotype = Type;
-
 /// Represents
 /// [monotypes](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Monotypes)
-/// (unquantified types).
+/// (fully instantiated, unquantified types).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type {
     /// primitive or composite types (e.g. `int`, `List(α)`, `α → β`)
@@ -406,11 +400,11 @@ impl Type {
     /// assert_eq!(format!("{}", t_gen), "∀t1. int → t1");
     /// # }
     /// ```
-    pub fn generalize(&self, ctx: &Context) -> Polytype {
+    pub fn generalize(&self, ctx: &Context) -> TypeSchema {
         let fvs = self.free_vars(ctx);
-        let mut t = Polytype::Monotype(self.clone());
+        let mut t = TypeSchema::Monotype(self.clone());
         for v in fvs.iter() {
-            t = Polytype::Binding {
+            t = TypeSchema::Polytype {
                 variable: v.clone(),
                 body: Box::new(t),
             };
@@ -533,8 +527,10 @@ impl std::error::Error for UnificationError {
     }
 }
 
-/// Context is a type environment, keeping track of substitutions and type
-/// variables. Useful for _unifying_ (and inferring) types.
+/// Represents a type environment. Useful for reasoning about types (e.g
+/// unification, type inference).
+///
+/// Contexts track substitutions and generate fresh type variables.
 #[derive(Debug, Clone)]
 pub struct Context {
     substitutions: HashMap<Variable, Type>,
@@ -703,7 +699,7 @@ mod parser {
     use nom::types::CompleteStr;
     use nom::{alpha, digit};
 
-    use super::{Polytype, Type};
+    use super::{Type, TypeSchema};
 
     fn nom_u32(inp: CompleteStr) -> Result<u32, ParseIntError> {
         inp.0.parse()
@@ -741,18 +737,18 @@ mod parser {
     named!(parenthetical<CompleteStr, Type>,
            delimited!(tag!("("), arrow, tag!(")"))
     );
-    named!(binding<CompleteStr, Polytype>,
+    named!(binding<CompleteStr, TypeSchema>,
            do_parse!(tag!("t") >>
                      variable: map_res!(digit, nom_u32) >>
                      ws!(tag!(".")) >>
                      body: map!(polytype, |p| Box::new(p)) >>
-                     (Polytype::Binding{variable, body}))
+                     (TypeSchema::Polytype{variable, body}))
     );
     named!(monotype<CompleteStr, Type>,
            alt!(arrow | var | constructed_complex | constructed_simple)
     );
-    named!(polytype<CompleteStr, Polytype>,
-           alt!(map!(monotype, |t| Polytype::Monotype(t)) | binding)
+    named!(polytype<CompleteStr, TypeSchema>,
+           alt!(map!(monotype, |t| TypeSchema::Monotype(t)) | binding)
     );
 
     pub fn parse(input: &str) -> Result<Type, ()> {
@@ -764,7 +760,7 @@ mod parser {
             _ => Err(()),
         }
     }
-    pub fn parsep(input: &str) -> Result<Polytype, ()> {
+    pub fn parsep(input: &str) -> Result<TypeSchema, ()> {
         match polytype(CompleteStr(input)) {
             Ok((_, t)) => Ok(t),
             _ => Err(()),
