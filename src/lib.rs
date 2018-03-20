@@ -22,7 +22,7 @@
 //!
 //! // quantified types provide polymorphic behavior.
 //! assert_eq!(format!("{}", &t), "∀t0. (t0 → bool) → list(t0) → list(t0)");
-//! assert!(t.is_polymorphic());
+//! assert!(t.as_polymorphic().is_some());
 //!
 //! // we can instantiate types to remove quantifiers
 //! let mut ctx = Context::default();
@@ -55,7 +55,7 @@
 //! assert_eq!(format!("{}", &t), "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
 //! // reduce is polymorphic
-//! assert!(t.is_polymorphic());
+//! assert!(t.as_polymorphic().is_some());
 //!
 //! // let's consider reduce when applied to a function that adds two ints
 //!
@@ -110,7 +110,7 @@ use std::fmt;
 
 /// Represents a [type
 /// variable](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Free_type_variables)
-/// (a particular but unspecified type)
+/// (an unknown type)
 pub type Variable = u32;
 
 /// Represents
@@ -130,11 +130,49 @@ pub enum TypeSchema {
     },
 }
 impl TypeSchema {
-    /// `true` if the type binds type variables else `false`?
-    pub fn is_polymorphic(&self) -> bool {
+    /// Optionally deconstruct a [`Polytype`].
+    ///
+    /// [`Polytype`]: enum.TypeScheme.html#variant.Polytype
+    pub fn as_polymorphic(&self) -> Option<(Variable, &TypeSchema)> {
         match *self {
-            TypeSchema::Polytype { .. } => true,
+            TypeSchema::Monotype(_) => None,
+            TypeSchema::Polytype { variable, ref body } => Some((variable, body)),
+        }
+    }
+    /// Returns a set of each [`Variable`] bound by the [`TypeScheme`].
+    ///
+    /// [`Variable`]: type.Variable.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
+    pub fn bound_variables(&self) -> HashSet<Variable> {
+        match *self {
+            TypeSchema::Monotype(_) => HashSet::new(),
+            TypeSchema::Polytype { variable, ref body } => {
+                let mut bvs = body.bound_variables();
+                bvs.insert(variable);
+                bvs
+            }
+        }
+    }
+    /// `true` if `v` is bound, otherwise `false`
+    pub fn is_bound(&self, v: Variable) -> bool {
+        match *self {
             TypeSchema::Monotype(_) => false,
+            TypeSchema::Polytype { variable, .. } if variable == v => true,
+            TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
+        }
+    }
+    /// returns a set of each free [`Variable`] in the [`TypeScheme`].
+    ///
+    /// [`Variable`]: type.Variable.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
+    pub fn free_vars(&self, ctx: &Context) -> HashSet<Variable> {
+        match *self {
+            TypeSchema::Monotype(ref t) => t.free_vars(ctx),
+            TypeSchema::Polytype { variable, ref body } => {
+                let mut fvs = body.free_vars(ctx);
+                fvs.remove(&variable);
+                fvs
+            }
         }
     }
     /// the work of instantiation happens here.
@@ -176,6 +214,32 @@ impl TypeSchema {
     /// ```
     pub fn instantiate(&self, ctx: &mut Context) -> Type {
         self.instantiate_helper(ctx, &mut HashMap::new())
+    }
+    /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
+    /// This is a **leaky** operation and should be avoided wherever possible:
+    /// names of constructed types will remain until program termination.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::TypeSchema;
+    /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
+    /// let t_lit = ptp!(0, ptp!(arrow![tp!(0), tp!(0)]));
+    /// assert_eq!(t_par, t_lit);
+    ///
+    /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
+    /// let t = TypeSchema::parse(s).expect("valid type");
+    /// let round_trip = format!("{}", &t);
+    /// assert_eq!(s, round_trip);
+    /// # }
+    /// ```
+    ///
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn parse(s: &str) -> Result<TypeSchema, ()> {
+        parser::parsep(s)
     }
 }
 impl fmt::Display for TypeSchema {
@@ -568,16 +632,6 @@ impl Context {
         self.next += 1;
         Type::Variable(self.next - 1)
     }
-    /// Create a new substitution from the next unused [`Type::Variable`] to the
-    /// [`Type`] `t`
-    ///
-    /// [`Type`]: enum.Type.html
-    /// [`Type::Variable`]: enum.Type.html#variant.Variable
-    pub fn extend_fresh(&mut self, t: Type) {
-        if let Type::Variable(v) = self.new_variable() {
-            self.extend(v, t);
-        }
-    }
     /// Create constraints within the context that ensure `t1` and `t2`
     /// unify.
     ///
@@ -738,7 +792,8 @@ mod parser {
            delimited!(tag!("("), arrow, tag!(")"))
     );
     named!(binding<CompleteStr, TypeSchema>,
-           do_parse!(tag!("t") >>
+           do_parse!(opt!(tag!("∀")) >>
+                     tag!("t") >>
                      variable: map_res!(digit, nom_u32) >>
                      ws!(tag!(".")) >>
                      body: map!(polytype, |p| Box::new(p)) >>
