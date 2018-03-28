@@ -756,6 +756,8 @@ impl Context {
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
     pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+        let t1 = t1.apply(self);
+        let t2 = t2.apply(self);
         let mut ctx = self.clone();
         ctx.unify_internal(t1, t2)?;
         *self = ctx;
@@ -763,12 +765,12 @@ impl Context {
     }
     /// unify_internal may mutate the context even with an error. The context on
     /// which it's called should be discarded if there's an error.
-    fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+    fn unify_internal(&mut self, t1: Type, t2: Type) -> Result<(), UnificationError> {
         if t1 == t2 {
             return Ok(());
         }
         match (t1, t2) {
-            (&Type::Variable(v), _) => {
+            (Type::Variable(v), t2) => {
                 if t2.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
@@ -776,7 +778,7 @@ impl Context {
                     Ok(())
                 }
             }
-            (_, &Type::Variable(v)) => {
+            (t1, Type::Variable(v)) => {
                 if t1.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
@@ -784,19 +786,17 @@ impl Context {
                     Ok(())
                 }
             }
-            (&Type::Constructed(n1, ref a1), &Type::Constructed(n2, ref a2)) => {
+            (Type::Constructed(n1, a1), Type::Constructed(n2, a2)) => {
                 if n1 != n2 {
                     Err(UnificationError::Failure(
-                        Type::Constructed(n1, vec![]),
-                        Type::Constructed(n2, vec![]),
+                        Type::Constructed(n1, a1),
+                        Type::Constructed(n2, a2),
                     ))
                 } else {
-                    for (t1, t2) in a1.into_iter().zip(a2) {
-                        let mut t1 = t1.clone();
-                        let mut t2 = t2.clone();
+                    for (mut t1, mut t2) in a1.into_iter().zip(a2) {
                         t1.apply_mut(self);
                         t2.apply_mut(self);
-                        self.unify_internal(&t1, &t2)?;
+                        self.unify_internal(t1, t2)?;
                     }
                     Ok(())
                 }
