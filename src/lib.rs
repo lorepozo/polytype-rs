@@ -13,8 +13,8 @@
 //!
 //! # fn main() {
 //! // filter: ∀α. (α → bool) → [α] → [α]
-//! let t = ptp!(0; arrow![
-//!     arrow![tp!(0), tp!(bool)],
+//! let t = ptp!(0; @arrow[
+//!     tp!(@arrow[tp!(0), tp!(bool)]),
 //!     tp!(list(tp!(0))),
 //!     tp!(list(tp!(0))),
 //! ]);
@@ -43,9 +43,8 @@
 //! # fn main() {
 //! // reduce: ∀α. ∀β. (β → α → β) → β → [α] → β
 //! // We can represent the type schema of reduce using the included macros:
-//! // tp!, ptp!, and arrow!.
-//! let t = ptp!(0, 1; arrow![
-//!     arrow![tp!(1), tp!(0), tp!(1)],
+//! let t = ptp!(0, 1; @arrow[
+//!     tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
 //!     tp!(1),
 //!     tp!(list(tp!(0))),
 //!     tp!(1),
@@ -55,7 +54,7 @@
 //! // Let's consider reduce when applied to a function that adds two ints
 //!
 //! // First, let's create a type representing binary addition.
-//! let tplus = arrow![tp!(int), tp!(int), tp!(int)];
+//! let tplus = tp!(@arrow[tp!(int), tp!(int), tp!(int)]);
 //! assert_eq!(format!("{}", &tplus), "int → int → int");
 //!
 //! // Let's also create a new typing context to manage typing bookkeeping.
@@ -72,12 +71,12 @@
 //! let targ2 = ctx.new_variable();
 //! ctx.unify(
 //!     &t,
-//!     &arrow![
+//!     &tp!(@arrow[
 //!         tplus.clone(),
 //!         targ1.clone(),
 //!         targ2.clone(),
 //!         treturn.clone(),
-//!     ],
+//!     ]),
 //! ).expect("unifies");
 //!
 //! // We can also now infer what arguments are needed and what gets returned
@@ -191,8 +190,8 @@ impl TypeSchema {
     /// # use polytype::Context;
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = ptp!(3; tp!(list(tp!(3))));
-    /// let t2 = ptp!(3; tp!(list(tp!(3))));
+    /// let t1 = ptp!(3; list(tp!(3)));
+    /// let t2 = ptp!(3; list(tp!(3)));
     ///
     /// let t1 = t1.instantiate(&mut ctx);
     /// let t2 = t2.instantiate(&mut ctx);
@@ -216,7 +215,7 @@ impl TypeSchema {
     /// # fn main() {
     /// # use polytype::TypeSchema;
     /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
-    /// let t_lit = ptp!(0; arrow![tp!(0), tp!(0)]);
+    /// let t_lit = ptp!(0; @arrow[tp!(0), tp!(0)]);
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
@@ -286,7 +285,7 @@ pub enum Type {
     /// # fn main() {
     /// # use polytype::Type;
     /// // any function: α → β
-    /// let t = arrow![Type::Variable(0), Type::Variable(1)];
+    /// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     /// # }
     /// ```
@@ -297,11 +296,11 @@ pub enum Type {
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// // map: (α → β) → [α] → [β]
-    /// let t = arrow![
-    ///     arrow![tp!(0), tp!(1)],
+    /// let t = tp!(@arrow[
+    ///     tp!(@arrow[tp!(0), tp!(1)]),
     ///     tp!(list(tp!(0))),
     ///     tp!(list(tp!(1))),
-    /// ];
+    /// ]);
     /// assert_eq!(format!("{}", &t), "(t0 → t1) → list(t0) → list(t1)");
     /// # }
     /// ```
@@ -414,7 +413,7 @@ impl Type {
     /// # fn main() {
     /// # use polytype::Type;
     /// # use std::collections::HashMap;
-    /// let t = arrow![tp!(0), tp!(1)];
+    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
     /// let mut substitution = HashMap::new();
@@ -442,7 +441,7 @@ impl Type {
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// # use polytype::{Context, Type};
-    /// let t = arrow![tp!(0), tp!(1)];
+    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
     /// let mut ctx = Context::default();
@@ -471,7 +470,7 @@ impl Type {
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// # use polytype::{Context, Type};
-    /// let t = arrow![tp!(0), tp!(1)];
+    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
     /// let mut ctx = Context::default();
@@ -507,7 +506,13 @@ impl Type {
     /// # fn main() {
     /// # use polytype::Type;
     /// let t_par = Type::parse("int -> hashmap(str, list(bool))").expect("valid type");
-    /// let t_lit = arrow![tp!(int), tp!(hashmap(tp!(str), tp!(list(tp!(bool)))))];
+    /// let t_lit = tp!(@arrow[
+    ///     tp!(int),
+    ///     tp!(hashmap(
+    ///         tp!(str),
+    ///         tp!(list(tp!(bool))),
+    ///     )),
+    /// ]);
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
@@ -628,8 +633,8 @@ impl Context {
     /// # use polytype::Context;
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = arrow![tp!(int), tp!(0)];
-    /// let t2 = arrow![tp!(1), tp!(bool)];
+    /// let t1 = tp!(@arrow[tp!(int), tp!(0)]);
+    /// let t2 = tp!(@arrow[tp!(1), tp!(bool)]);
     /// ctx.unify(&t1, &t2).expect("unifies");
     ///
     /// let t1 = t1.apply(&ctx);
@@ -647,8 +652,8 @@ impl Context {
     /// # use polytype::{Context, UnificationError};
     /// let mut ctx = Context::default();
     ///
-    /// let t1 = arrow![tp!(int), tp!(0)];
-    /// let t2 = arrow![tp!(bool), tp!(1)];
+    /// let t1 = tp!(@arrow[tp!(int), tp!(0)]);
+    /// let t2 = tp!(@arrow[tp!(bool), tp!(1)]);
     /// let res = ctx.unify(&t1, &t2);
     ///
     /// if let Err(UnificationError::Failure(left, right)) = res {
@@ -671,7 +676,7 @@ impl Context {
     /// let mut ctx = Context::default();
     ///
     /// let t1 = tp!(1);
-    /// let t2 = arrow![tp!(bool), tp!(1)];
+    /// let t2 = tp!(@arrow[tp!(bool), tp!(1)]);
     /// let res = ctx.unify(&t1, &t2);
     ///
     /// if let Err(UnificationError::Occurs(v)) = res {

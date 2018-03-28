@@ -19,9 +19,8 @@ polytype = "3.0"
 [`Type`](https://docs.rs/polytype/3.0.0/polytype/enum.Type.html) enums, the
 [`Context`](https://docs.rs/polytype/3.0.0/polytype/struct.Context.html)
 struct, and the
-[`tp!`](https://docs.rs/polytype/3.0.0/polytype/macro.tp.html),
-[`arrow!`](https://docs.rs/polytype/3.0.0/polytype/macro.arrow.html), and
-[`ptp!`](https://docs.rs/polytype/3.0.0/polytype/macro.ptp.html) macros, which help
+[`tp!`](https://docs.rs/polytype/3.0.0/polytype/macro.tp.html) and
+[`ptp!`](https://docs.rs/polytype/3.0.0/polytype/macro.ptp.html) which help
 to concisely create types and type schemas.
 
 Unification:
@@ -30,8 +29,8 @@ Unification:
 let mut ctx = Context::default();
 
 // t1: list(int → α) ; t2: list(β → bool)
-let t1 = tp!(list(arrow![tp!(int), tp!(0)]));
-let t2 = tp!(list(arrow![tp!(1), tp!(bool)]));
+let t1 = tp!(list(tp!(@arrow[tp!(int), tp!(0)])));
+let t2 = tp!(list(tp!(@arrow[tp!(1), tp!(bool)])));
 ctx.unify(&t1, &t2).expect("unifies");
 
 let t1 = t1.apply(&ctx);
