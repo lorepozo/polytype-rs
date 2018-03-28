@@ -748,13 +748,11 @@ impl Context {
     /// unify_internal may mutate the context even with an error. The context on
     /// which it's called should be discarded if there's an error.
     fn unify_internal(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
-        let t1 = t1.apply(self);
-        let t2 = t2.apply(self);
         if t1 == t2 {
             return Ok(());
         }
         match (t1, t2) {
-            (Type::Variable(v), t2) => {
+            (&Type::Variable(v), _) => {
                 if t2.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
@@ -762,7 +760,7 @@ impl Context {
                     Ok(())
                 }
             }
-            (t1, Type::Variable(v)) => {
+            (_, &Type::Variable(v)) => {
                 if t1.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
@@ -770,14 +768,16 @@ impl Context {
                     Ok(())
                 }
             }
-            (Type::Constructed(n1, a1), Type::Constructed(n2, a2)) => {
+            (&Type::Constructed(n1, ref a1), &Type::Constructed(n2, ref a2)) => {
                 if n1 != n2 {
                     Err(UnificationError::Failure(
-                        Type::Constructed(n1, a1),
-                        Type::Constructed(n2, a2),
+                        Type::Constructed(n1, vec![]),
+                        Type::Constructed(n2, vec![]),
                     ))
                 } else {
                     for (t1, t2) in a1.into_iter().zip(a2) {
+                        let t1 = t1.apply(self);
+                        let t2 = t2.apply(self);
                         self.unify_internal(&t1, &t2)?;
                     }
                     Ok(())
