@@ -114,7 +114,7 @@ mod macros;
 
 use itertools::Itertools;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
 /// Represents a [type variable][1] (an unknown type).
@@ -171,12 +171,16 @@ impl TypeSchema {
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
+        let mut s = HashSet::new();
+        self.free_vars_internal(ctx, &mut s);
+        s.into_iter().collect()
+    }
+    pub fn free_vars_internal(&self, ctx: &Context, s: &mut HashSet<Variable>) {
         match *self {
-            TypeSchema::Monotype(ref t) => t.free_vars(ctx),
+            TypeSchema::Monotype(ref t) => t.free_vars_internal(ctx, s),
             TypeSchema::Polytype { variable, ref body } => {
-                let mut fvs = body.free_vars(ctx);
-                fvs.retain(|&v| v != variable);
-                fvs
+                body.free_vars_internal(ctx, s);
+                s.remove(&variable);
             }
         }
     }
@@ -492,15 +496,18 @@ impl Type {
     /// # }
     /// ```
     pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
+        let mut s = HashSet::new();
+        self.free_vars_internal(ctx, &mut s);
+        s.into_iter().collect()
+    }
+    pub fn free_vars_internal(&self, ctx: &Context, s: &mut HashSet<Variable>) {
         match *self {
-            Type::Constructed(_, ref args) => args.iter()
-                .flat_map(|a| a.free_vars(ctx).into_iter())
-                .collect(),
+            Type::Constructed(_, ref args) => for arg in args {
+                arg.free_vars_internal(ctx, s);
+            },
             Type::Variable(v) => {
                 if !ctx.substitution.contains_key(&v) {
-                    vec![v]
-                } else {
-                    vec![]
+                    s.insert(v);
                 }
             }
         }
