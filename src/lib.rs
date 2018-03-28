@@ -497,7 +497,7 @@ impl Type {
                 .flat_map(|a| a.free_vars(ctx).into_iter())
                 .collect(),
             Type::Variable(v) => {
-                if !ctx.substitution().contains_key(&v) {
+                if !ctx.substitution.contains_key(&v) {
                     vec![v]
                 } else {
                     vec![]
