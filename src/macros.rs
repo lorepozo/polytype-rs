@@ -140,14 +140,14 @@ macro_rules! tp {
 /// }
 /// ```
 ///
-/// This behaves much like [`tp!`], but this gives a [`TypeSchema`] and you can express quantified
-/// type variables in a prefixed comma-delimited list. There are three usage patterns, shown in the
-/// examples below.
+/// This behaves much like [`tp!`], but this gives a [`TypeSchema`] and you can
+/// express quantified type variables in a prefixed comma-delimited list. There
+/// are three usage patterns, shown in the examples below.
 ///
 /// # Examples
 ///
-/// If you don't want to do any quantification (i.e. you want a [`TypeSchema::Monotype`]), using
-/// `ptp!` on its own is just like wrapping [`tp!`] with a [`TypeSchema::Monotype`]:
+/// If you don't want to do any quantification, using `ptp!` on its own is just
+/// like wrapping [`tp!`] with a [`TypeSchema::Monotype`]:
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
@@ -166,9 +166,9 @@ macro_rules! tp {
 /// # }
 /// ```
 ///
-/// If you want to do quantification over a known monotype, precede the type with quantified
-/// variables follows by a semicolon `;` (note that the subsequent monotype is treated like the
-/// [`tp!`] macro):
+/// If you want to do quantification over a known monotype, precede the type
+/// with quantified variables follows by a semicolon `;` (note that the
+/// subsequent monotype is treated like the [`tp!`] macro):
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
@@ -196,30 +196,22 @@ macro_rules! tp {
 /// # }
 /// ```
 ///
-/// If you want want do quantification over an existing [`TypeSchema`], use a comma after the
-/// quantified variables:
+/// If you want want do quantification over an existing [`TypeSchema`], use a
+/// comma after the quantified variables:
 ///
 /// ```
 /// # #[macro_use] extern crate polytype;
 /// # use polytype::{Type, TypeSchema};
 /// # fn main() {
 /// let inner = tp!(@arrow[tp!(0), tp!(1), tp!(0)]);
-/// let t = ptp!(0, 1, TypeSchema::Monotype(inner));
+/// let t = ptp!(0, 1, TypeSchema::Monotype(inner.clone()));
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
 /// let t_eq = TypeSchema::Polytype {
 ///     variable: 0,
 ///     body: Box::new(TypeSchema::Polytype {
 ///         variable: 1,
-///         body: Box::new(TypeSchema::Monotype(
-///             Type::arrow(
-///                 Type::Variable(0),
-///                 Type::arrow(
-///                     Type::Variable(1),
-///                     Type::Variable(0),
-///                 )
-///             )
-///         ))
+///         body: Box::new(TypeSchema::Monotype(inner))
 ///     })
 /// };
 /// assert_eq!(t, t_eq);

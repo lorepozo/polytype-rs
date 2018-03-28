@@ -43,7 +43,7 @@ Apply a type context:
 ```rust
 let mut ctx = Context::default();
 // assign t0 to int
-ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
+ctx.extend(0, tp!(int));
 
 let t = tp!(list(tp!(0)));
 assert_eq!(format!("{}", &t), "list(t0)");
