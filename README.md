@@ -15,12 +15,12 @@ polytype = "4.0"
 ```
 
 **`polytype`** provides the
-[`TypeSchema`](https://docs.rs/polytype/4.0.0/polytype/enum.TypeSchema.html) and
-[`Type`](https://docs.rs/polytype/4.0.0/polytype/enum.Type.html) enums, the
-[`Context`](https://docs.rs/polytype/4.0.0/polytype/struct.Context.html)
+[`TypeSchema`](https://docs.rs/polytype/4.0.1/polytype/enum.TypeSchema.html) and
+[`Type`](https://docs.rs/polytype/4.0.1/polytype/enum.Type.html) enums, the
+[`Context`](https://docs.rs/polytype/4.0.1/polytype/struct.Context.html)
 struct, and the
-[`tp!`](https://docs.rs/polytype/4.0.0/polytype/macro.tp.html) and
-[`ptp!`](https://docs.rs/polytype/4.0.0/polytype/macro.ptp.html) which help
+[`tp!`](https://docs.rs/polytype/4.0.1/polytype/macro.tp.html) and
+[`ptp!`](https://docs.rs/polytype/4.0.1/polytype/macro.ptp.html) which help
 to concisely create types and type schemas.
 
 Unification:
