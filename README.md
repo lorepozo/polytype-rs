@@ -20,8 +20,8 @@ polytype = "4.0"
 [`Context`](https://docs.rs/polytype/~4/polytype/struct.Context.html)
 struct, and the
 [`tp!`](https://docs.rs/polytype/~4/polytype/macro.tp.html) and
-[`ptp!`](https://docs.rs/polytype/~4/polytype/macro.ptp.html) which help
-to concisely create types and type schemas.
+[`ptp!`](https://docs.rs/polytype/~4/polytype/macro.ptp.html) macros which
+help to concisely create types and type schemas.
 
 Unification:
 
