@@ -425,6 +425,22 @@ impl Type {
                 .unwrap_or_else(|| Type::Variable(v)),
         }
     }
+    /// Like [`apply`], but works in-place.
+    ///
+    /// [`apply`]: #method.apply
+    pub fn apply_mut(&mut self, ctx: &Context) {
+        match *self {
+            Type::Constructed(_, ref mut args) => for ref mut t in args {
+                t.apply_mut(ctx)
+            },
+            Type::Variable(v) => {
+                *self = ctx.substitution
+                    .get(&v)
+                    .cloned()
+                    .unwrap_or_else(|| Type::Variable(v));
+            }
+        }
+    }
     /// Generalizes the type by binding free variables in a [`TypeSchema`].
     ///
     /// # Examples
@@ -776,8 +792,10 @@ impl Context {
                     ))
                 } else {
                     for (t1, t2) in a1.into_iter().zip(a2) {
-                        let t1 = t1.apply(self);
-                        let t2 = t2.apply(self);
+                        let mut t1 = t1.clone();
+                        let mut t2 = t2.clone();
+                        t1.apply_mut(self);
+                        t2.apply_mut(self);
                         self.unify_internal(&t1, &t2)?;
                     }
                     Ok(())
