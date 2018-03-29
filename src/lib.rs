@@ -120,7 +120,7 @@ use std::fmt;
 /// Represents a [type variable][1] (an unknown type).
 ///
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Free_type_variables
-pub type Variable = u32;
+pub type Variable = u16;
 
 /// Represents [polytypes][1] (uninstantiated, universally quantified types).
 ///
@@ -867,13 +867,13 @@ mod parser {
 
     use super::{Type, TypeSchema};
 
-    fn nom_u32(inp: CompleteStr) -> Result<u32, ParseIntError> {
+    fn nom_u16(inp: CompleteStr) -> Result<u16, ParseIntError> {
         inp.0.parse()
     }
 
     named!(var<CompleteStr, Type>,
            do_parse!(tag!("t") >>
-                     num: map_res!(digit, nom_u32) >>
+                     num: map_res!(digit, nom_u16) >>
                      (Type::Variable(num)))
     );
     named!(constructed_simple<CompleteStr, Type>,
@@ -906,7 +906,7 @@ mod parser {
     named!(binding<CompleteStr, TypeSchema>,
            do_parse!(opt!(tag!("∀")) >>
                      tag!("t") >>
-                     variable: map_res!(digit, nom_u32) >>
+                     variable: map_res!(digit, nom_u16) >>
                      ws!(tag!(".")) >>
                      body: map!(polytype, Box::new) >>
                      (TypeSchema::Polytype{variable, body}))
