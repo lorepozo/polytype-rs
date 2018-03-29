@@ -147,17 +147,29 @@ pub enum TypeSchema {
 impl TypeSchema {
     /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]);
+    /// assert_eq!(
+    ///     t.bound_variables(),
+    ///     vec![0, 1],
+    /// );
+    /// # }
+    /// ```
+    ///
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn bound_variables(&self) -> Vec<Variable> {
-        match *self {
-            TypeSchema::Monotype(_) => vec![],
-            TypeSchema::Polytype { variable, ref body } => {
-                let mut bvs = body.bound_variables();
-                bvs.push(variable);
-                bvs
-            }
+        let mut t = self;
+        let mut bvs = Vec::new();
+        while let TypeSchema::Polytype { variable, ref body } = *t {
+            bvs.push(variable);
+            t = body
         }
+        bvs
     }
     pub fn is_bound(&self, v: Variable) -> bool {
         match *self {
@@ -181,22 +193,6 @@ impl TypeSchema {
             TypeSchema::Polytype { variable, ref body } => {
                 body.free_vars_internal(ctx, s);
                 s.remove(&variable);
-            }
-        }
-    }
-    /// The work of instantiation happens here.
-    fn instantiate_helper(
-        &self,
-        ctx: &mut Context,
-        substitution: &mut HashMap<Variable, Type>,
-    ) -> Type {
-        match *self {
-            TypeSchema::Monotype(ref t) => t.substitute(substitution),
-            TypeSchema::Polytype { variable, ref body } => {
-                if let Type::Variable(v) = ctx.new_variable() {
-                    substitution.insert(variable, Type::Variable(v));
-                }
-                body.instantiate_helper(ctx, substitution)
             }
         }
     }
@@ -224,7 +220,42 @@ impl TypeSchema {
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn instantiate(&self, ctx: &mut Context) -> Type {
-        self.instantiate_helper(ctx, &mut HashMap::new())
+        self.instantiate_internal(ctx, &mut HashMap::new())
+    }
+    fn instantiate_internal(
+        &self,
+        ctx: &mut Context,
+        substitution: &mut HashMap<Variable, Type>,
+    ) -> Type {
+        match *self {
+            TypeSchema::Monotype(ref t) => t.substitute(substitution),
+            TypeSchema::Polytype { variable, ref body } => {
+                substitution.insert(variable, ctx.new_variable());
+                body.instantiate_internal(ctx, substitution)
+            }
+        }
+    }
+    /// Like [`instantiate`], but works in-place.
+    ///
+    /// [`instantiate`]: #method.instantiate
+    pub fn instantiate_owned(self, ctx: &mut Context) -> Type {
+        self.instantiate_owned_internal(ctx, &mut HashMap::new())
+    }
+    fn instantiate_owned_internal(
+        self,
+        ctx: &mut Context,
+        substitution: &mut HashMap<Variable, Type>,
+    ) -> Type {
+        match self {
+            TypeSchema::Monotype(mut t) => {
+                t.substitute_mut(substitution);
+                t
+            }
+            TypeSchema::Polytype { variable, body } => {
+                substitution.insert(variable, ctx.new_variable());
+                body.instantiate_owned_internal(ctx, substitution)
+            }
+        }
     }
     /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
     /// This is a **leaky** operation and should be avoided wherever possible:
@@ -434,7 +465,7 @@ impl Type {
     /// [`apply`]: #method.apply
     pub fn apply_mut(&mut self, ctx: &Context) {
         match *self {
-            Type::Constructed(_, ref mut args) => for ref mut t in args {
+            Type::Constructed(_, ref mut args) => for t in args {
                 t.apply_mut(ctx)
             },
             Type::Variable(v) => {
@@ -544,6 +575,21 @@ impl Type {
                 .get(&v)
                 .cloned()
                 .unwrap_or_else(|| Type::Variable(v)),
+        }
+    }
+    /// Like [`substitute`], but works in-place.
+    ///
+    /// [`substitute`]: #method.substitute
+    pub fn substitute_mut(&mut self, substitution: &HashMap<Variable, Type>) {
+        match *self {
+            Type::Constructed(_, ref mut args) => for t in args {
+                t.substitute_mut(substitution)
+            },
+            Type::Variable(v) => {
+                if let Some(t) = substitution.get(&v) {
+                    *self = t.clone()
+                }
+            }
         }
     }
     /// Parse a type from a string. This round-trips with [`Display`]. This is a
