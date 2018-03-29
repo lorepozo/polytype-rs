@@ -11,7 +11,7 @@ Implements type inference via unification.
 
 ```toml
 [dependencies]
-polytype = "4.0"
+polytype = "4.1"
 ```
 
 **`polytype`** provides the
