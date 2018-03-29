@@ -827,6 +827,15 @@ impl Context {
         *self = ctx;
         Ok(())
     }
+    /// Like [`unify`], but may affect the context even under failure. Hence, use this if you
+    /// discard the context upon failure.
+    ///
+    /// [`unify`]: #method.unify
+    pub fn unify_fast(&mut self, mut t1: Type, mut t2: Type) -> Result<(), UnificationError> {
+        t1.apply_mut(self);
+        t2.apply_mut(self);
+        self.unify_internal(t1, t2)
+    }
     /// unify_internal may mutate the context even with an error. The context on
     /// which it's called should be discarded if there's an error.
     fn unify_internal(&mut self, t1: Type, t2: Type) -> Result<(), UnificationError> {
