@@ -809,8 +809,10 @@ impl Context {
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
     pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
-        let t1 = t1.apply(self);
-        let t2 = t2.apply(self);
+        let mut t1 = t1.clone();
+        let mut t2 = t2.clone();
+        t1.apply_mut(self);
+        t2.apply_mut(self);
         let mut ctx = self.clone();
         ctx.unify_internal(t1, t2)?;
         *self = ctx;
