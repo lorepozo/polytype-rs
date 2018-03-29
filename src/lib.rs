@@ -410,20 +410,29 @@ impl Type {
     }
     /// If the type is an arrow, recursively get all curried function arguments.
     pub fn args(&self) -> Option<VecDeque<&Type>> {
-        match *self {
-            Type::Constructed("→", ref args) => {
-                let mut tps = args[1].args().unwrap_or_default();
-                tps.push_front(&args[0]);
-                Some(tps)
+        if let Type::Constructed("→", ref args) = *self {
+            let mut tps = VecDeque::with_capacity(1);
+            tps.push_back(&args[0]);
+            let mut tp = &args[1];
+            while let Type::Constructed("→", ref args) = *tp {
+                tps.push_back(&args[0]);
+                tp = &args[1];
             }
-            Type::Variable(_) | Type::Constructed(..) => None,
+            Some(tps)
+        } else {
+            None
         }
     }
     /// If the type is an arrow, get its ultimate return type.
     pub fn returns(&self) -> Option<&Type> {
-        match *self {
-            Type::Constructed("→", ref args) => args[1].returns().or_else(|| Some(&args[1])),
-            Type::Variable(_) | Type::Constructed(..) => None,
+        if let Type::Constructed("→", ref args) = *self {
+            let mut tp = &args[1];
+            while let Type::Constructed("→", ref args) = *tp {
+                tp = &args[1];
+            }
+            Some(tp)
+        } else {
+            None
         }
     }
     /// Applies the type in a [`Context`].

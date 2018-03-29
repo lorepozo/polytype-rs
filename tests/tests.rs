@@ -124,6 +124,15 @@ fn test_arrow_methods() {
     let ta3 = tp!(@arrow[tp!(@arrow[tp!(0), tp!(int)]), tp!(int), tp!(0)]);
     assert_eq!(ta3, ta1);
     assert_eq!(ta3, ta2);
+    let t = tp!(@arrow[tp!(@arrow[tp!(0), tp!(int)]), tp!(int), tp!(0)]);
+    assert_eq!(
+        t.args(),
+        Some(VecDeque::from(vec![
+            &tp!(@arrow[tp!(0), tp!(int)]),
+            &tp!(int),
+        ])),
+    );
+    assert_eq!(t.returns(), Some(&tp!(0)));
 }
 
 #[test]
