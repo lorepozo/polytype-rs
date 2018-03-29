@@ -1,6 +1,6 @@
 [package]
 name = "polytype"
-version = "4.1.0"
+version = "4.1.1"
 authors = ["Lucas Morales <lucas@lucasem.com>"]
 license = "MIT"
 readme = "README.md"
