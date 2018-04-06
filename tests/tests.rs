@@ -236,6 +236,50 @@ fn test_unify_both_sides_polymorphic_occurs() {
 }
 
 #[test]
+fn test_unify_nonstring_name() {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct N(u32);
+    impl Name for N {
+        fn arrow() -> Self {
+            N(0)
+        }
+    }
+
+    let ts = TypeSchema::Polytype {
+        variable: 0,
+        body: Box::new(TypeSchema::Monotype(Type::Constructed(
+            N(3),
+            vec![Type::Variable(0)],
+        ))),
+    };
+
+    let mut ctx = Context::default();
+    let t = ts.instantiate(&mut ctx);
+    ctx.unify(
+        &Type::Constructed(
+            N(3),
+            vec![
+                Type::arrow(
+                    Type::Constructed(N(1), vec![]),
+                    Type::Constructed(N(2), vec![]),
+                ),
+            ],
+        ),
+        &t,
+    ).expect("nonstring one side polymorphic");
+
+    let mut ctx = Context::default();
+    let t = ts.instantiate(&mut ctx);
+    ctx.unify(
+        &Type::arrow(
+            Type::Constructed(N(1), vec![]),
+            Type::Constructed(N(2), vec![]),
+        ),
+        &t,
+    ).expect_err("nonstring incompatible types");
+}
+
+#[test]
 fn test_parse() {
     let t = tp!(int);
     assert_eq!(&t, &Type::parse("int").expect("parse 1"));

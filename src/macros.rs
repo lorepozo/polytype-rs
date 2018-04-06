@@ -1,5 +1,7 @@
 /// Creates a [`Type`][] (convenience for common patterns).
 ///
+/// Specifically, a `Type<&'static str>`, where all names are static strings.
+///
 /// ```rust,ignore
 /// // Equivalent to:
 /// Type::Constructed(ident, vec![
@@ -115,8 +117,8 @@ macro_rules! tp {
         $crate::Type::Constructed(stringify!($n), vec![$($x),*])
     };
     ($n:ident($($x:expr,)*)) => (tp!($n($($x),*)));
-    ($n:expr) => ($crate::Type::Variable($n));
-    (@arrow[$x:expr]) => ($x);
+    ($n:expr) => ($crate::Type::Variable($n) as $crate::Type<&'static str>);
+    (@arrow[$x:expr]) => ($x as $crate::Type<&'static str>);
     (@arrow[$x:expr, $($xs:expr),*]) => (
         match ($x, tp!(@arrow[$($xs),+])) {
             (arg, ret) => $crate::Type::arrow(arg, ret)
@@ -126,6 +128,8 @@ macro_rules! tp {
 }
 
 /// Creates a [`TypeSchema`][] (convenience for common patterns).
+///
+/// Specifically, a `TypeSchema<&'static str>`, where all names are static strings.
 ///
 /// ```rust,ignore
 /// // Equivalent to:

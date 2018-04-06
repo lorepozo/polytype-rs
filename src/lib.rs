@@ -117,6 +117,80 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
+/// Types require a `Name` for comparison.
+///
+/// We mandate that [`arrow`] be implemented for any such names, and we provide an implementation
+/// for `&'static str`.
+///
+/// # Examples
+///
+/// Using static strings:
+///
+/// ```
+/// # use polytype::Type;
+/// let t = Type::Constructed("int", vec![])
+/// # ;
+/// ```
+///
+/// A custom implementation:
+///
+/// ```
+/// # use polytype::{Type, Name};
+/// #[derive(Clone, PartialEq, Eq)]
+/// struct N(u8);
+///
+/// impl Name for N {
+///     fn arrow() -> Self {
+///         N(0)
+///     }
+/// }
+///
+/// let t: Type<N> = Type::Constructed(N(1), vec![])
+/// # ;
+/// ```
+///
+/// [`arrow`]: #tymethod.arrow
+pub trait Name: Clone + Eq {
+    /// A specific name representing an arrow must be declared.
+    fn arrow() -> Self;
+    /// A way of displaying the name.
+    fn show(&self) -> String {
+        String::from("<unshowable type>")
+    }
+    /// To go from a particular name's string representation to a `Name`. This should round-trip
+    /// with [`show`].
+    ///
+    /// [`show`]: #method.show
+    fn parse(&str) -> Result<Self, ()> {
+        Err(())
+    }
+
+    fn is_arrow(&self) -> bool {
+        *self == Self::arrow()
+    }
+}
+impl Name for &'static str {
+    /// The rightwards arrow in unicode: `→`.
+    #[inline(always)]
+    fn arrow() -> &'static str {
+        "→"
+    }
+    #[inline(always)]
+    fn show(&self) -> String {
+        self.to_string()
+    }
+    /// **LEAKY** because it gives the string a static lifetime.
+    #[inline(always)]
+    fn parse(s: &str) -> Result<&'static str, ()> {
+        Ok(unsafe { &mut *Box::into_raw(s.to_string().into_boxed_str()) })
+    }
+    /// The rightwards arrow in unicode: `→`.
+    #[inline(always)]
+    fn is_arrow(&self) -> bool {
+        *self == "→"
+    }
+}
+
 /// Represents a [type variable][1] (an unknown type).
 ///
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Free_type_variables
@@ -131,9 +205,9 @@ pub type Variable = u16;
 /// [`ptp!`]: macro.ptp.html
 /// [`Type::generalize`]: enum.Type.html#method.generalize
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum TypeSchema {
+pub enum TypeSchema<N: Name = &'static str> {
     /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
-    Monotype(Type),
+    Monotype(Type<N>),
     /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
     Polytype {
         /// The [`Variable`] being bound
@@ -141,10 +215,10 @@ pub enum TypeSchema {
         /// [`Variable`]: type.Variable.html
         variable: Variable,
         /// The type in which `variable` is bound
-        body: Box<TypeSchema>,
+        body: Box<TypeSchema<N>>,
     },
 }
-impl TypeSchema {
+impl<N: Name> TypeSchema<N> {
     /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
     ///
     /// # Examples
@@ -182,12 +256,12 @@ impl TypeSchema {
     ///
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
+    pub fn free_vars(&self, ctx: &Context<N>) -> Vec<Variable> {
         let mut s = HashSet::new();
         self.free_vars_internal(ctx, &mut s);
         s.into_iter().collect()
     }
-    pub fn free_vars_internal(&self, ctx: &Context, s: &mut HashSet<Variable>) {
+    pub fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
         match *self {
             TypeSchema::Monotype(ref t) => t.free_vars_internal(ctx, s),
             TypeSchema::Polytype { variable, ref body } => {
@@ -219,14 +293,14 @@ impl TypeSchema {
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn instantiate(&self, ctx: &mut Context) -> Type {
+    pub fn instantiate(&self, ctx: &mut Context<N>) -> Type<N> {
         self.instantiate_internal(ctx, &mut HashMap::new())
     }
     fn instantiate_internal(
         &self,
-        ctx: &mut Context,
-        substitution: &mut HashMap<Variable, Type>,
-    ) -> Type {
+        ctx: &mut Context<N>,
+        substitution: &mut HashMap<Variable, Type<N>>,
+    ) -> Type<N> {
         match *self {
             TypeSchema::Monotype(ref t) => t.substitute(substitution),
             TypeSchema::Polytype { variable, ref body } => {
@@ -238,14 +312,14 @@ impl TypeSchema {
     /// Like [`instantiate`], but works in-place.
     ///
     /// [`instantiate`]: #method.instantiate
-    pub fn instantiate_owned(self, ctx: &mut Context) -> Type {
+    pub fn instantiate_owned(self, ctx: &mut Context<N>) -> Type<N> {
         self.instantiate_owned_internal(ctx, &mut HashMap::new())
     }
     fn instantiate_owned_internal(
         self,
-        ctx: &mut Context,
-        substitution: &mut HashMap<Variable, Type>,
-    ) -> Type {
+        ctx: &mut Context<N>,
+        substitution: &mut HashMap<Variable, Type<N>>,
+    ) -> Type<N> {
         match self {
             TypeSchema::Monotype(mut t) => {
                 t.substitute_mut(substitution);
@@ -274,7 +348,7 @@ impl TypeSchema {
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
-    /// let t = TypeSchema::parse(s).expect("valid type");
+    /// let t: TypeSchema<&'static str> = TypeSchema::parse(s).expect("valid type");
     /// let round_trip = format!("{}", &t);
     /// assert_eq!(s, round_trip);
     /// # }
@@ -282,11 +356,11 @@ impl TypeSchema {
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn parse(s: &str) -> Result<TypeSchema, ()> {
-        parser::parsep(s)
+    pub fn parse(s: &str) -> Result<TypeSchema<N>, ()> {
+        parser::parse_typeschema(s)
     }
 }
-impl fmt::Display for TypeSchema {
+impl<N: Name> fmt::Display for TypeSchema<N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             TypeSchema::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
@@ -304,7 +378,7 @@ impl fmt::Display for TypeSchema {
 /// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Type {
+pub enum Type<N: Name = &'static str> {
     /// Primitive or composite types (e.g. `int`, `List(α)`, `α → β`)
     ///
     /// # Examples
@@ -335,7 +409,7 @@ pub enum Type {
     /// assert_eq!(format!("{}", &t), "list(int)");
     /// # }
     /// ```
-    Constructed(&'static str, Vec<Type>),
+    Constructed(N, Vec<Type<N>>),
     /// Type variables (e.g. `α`, `β`) identified by de Bruin indices.
     ///
     /// # Examples
@@ -366,17 +440,16 @@ pub enum Type {
     /// ```
     Variable(Variable),
 }
-impl Type {
+impl<N: Name> Type<N> {
     /// Construct a function type (i.e. `alpha` → `beta`).
-    pub fn arrow(alpha: Type, beta: Type) -> Type {
-        Type::Constructed("→", vec![alpha, beta])
+    pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
+        Type::Constructed(N::arrow(), vec![alpha, beta])
     }
     /// If the type is an arrow, get its associated argument and return types.
-    pub fn as_arrow(&self) -> Option<(&Type, &Type)> {
-        if let Type::Constructed("→", ref args) = *self {
-            Some((&args[0], &args[1]))
-        } else {
-            None
+    pub fn as_arrow(&self) -> Option<(&Type<N>, &Type<N>)> {
+        match *self {
+            Type::Constructed(ref n, ref args) if n.is_arrow() => Some((&args[0], &args[1])),
+            _ => None,
         }
     }
     fn occurs(&self, v: Variable) -> bool {
@@ -389,19 +462,23 @@ impl Type {
     fn show(&self, is_return: bool) -> String {
         match *self {
             Type::Variable(v) => format!("t{}", v),
-            Type::Constructed(name, ref args) => {
+            Type::Constructed(ref name, ref args) => {
                 if args.is_empty() {
-                    String::from(name)
-                } else if name == "→" {
+                    name.show()
+                } else if name.is_arrow() {
                     Type::arrow_show(args, is_return)
                 } else {
-                    format!("{}({})", name, args.iter().map(|t| t.show(true)).join(","))
+                    format!(
+                        "{}({})",
+                        name.show(),
+                        args.iter().map(|t| t.show(true)).join(",")
+                    )
                 }
             }
         }
     }
     /// Show specifically for arrow types
-    fn arrow_show(args: &[Type], is_return: bool) -> String {
+    fn arrow_show(args: &[Type<N>], is_return: bool) -> String {
         if is_return {
             format!("{} → {}", args[0].show(false), args[1].show(true))
         } else {
@@ -409,30 +486,42 @@ impl Type {
         }
     }
     /// If the type is an arrow, recursively get all curried function arguments.
-    pub fn args(&self) -> Option<VecDeque<&Type>> {
-        if let Type::Constructed("→", ref args) = *self {
-            let mut tps = VecDeque::with_capacity(1);
-            tps.push_back(&args[0]);
-            let mut tp = &args[1];
-            while let Type::Constructed("→", ref args) = *tp {
+    pub fn args(&self) -> Option<VecDeque<&Type<N>>> {
+        match *self {
+            Type::Constructed(ref n, ref args) if n.is_arrow() => {
+                let mut tps = VecDeque::with_capacity(1);
                 tps.push_back(&args[0]);
-                tp = &args[1];
+                let mut tp = &args[1];
+                loop {
+                    match *tp {
+                        Type::Constructed(ref n, ref args) if n.is_arrow() => {
+                            tps.push_back(&args[0]);
+                            tp = &args[1];
+                        }
+                        _ => break,
+                    }
+                }
+                Some(tps)
             }
-            Some(tps)
-        } else {
-            None
+            _ => None,
         }
     }
     /// If the type is an arrow, get its ultimate return type.
-    pub fn returns(&self) -> Option<&Type> {
-        if let Type::Constructed("→", ref args) = *self {
-            let mut tp = &args[1];
-            while let Type::Constructed("→", ref args) = *tp {
-                tp = &args[1];
+    pub fn returns(&self) -> Option<&Type<N>> {
+        match *self {
+            Type::Constructed(ref n, ref args) if n.is_arrow() => {
+                let mut tp = &args[1];
+                loop {
+                    match *tp {
+                        Type::Constructed(ref n, ref args) if n.is_arrow() => {
+                            tp = &args[1];
+                        }
+                        _ => break,
+                    }
+                }
+                Some(tp)
             }
-            Some(tp)
-        } else {
-            None
+            _ => None,
         }
     }
     /// Applies the type in a [`Context`].
@@ -457,11 +546,11 @@ impl Type {
     /// ```
     ///
     /// [`Context`]: struct.Context.html
-    pub fn apply(&self, ctx: &Context) -> Type {
+    pub fn apply(&self, ctx: &Context<N>) -> Type<N> {
         match *self {
-            Type::Constructed(name, ref args) => {
+            Type::Constructed(ref name, ref args) => {
                 let args = args.iter().map(|t| t.apply(ctx)).collect();
-                Type::Constructed(name, args)
+                Type::Constructed(name.clone(), args)
             }
             Type::Variable(v) => ctx.substitution
                 .get(&v)
@@ -472,7 +561,7 @@ impl Type {
     /// Like [`apply`], but works in-place.
     ///
     /// [`apply`]: #method.apply
-    pub fn apply_mut(&mut self, ctx: &Context) {
+    pub fn apply_mut(&mut self, ctx: &Context<N>) {
         match *self {
             Type::Constructed(_, ref mut args) => for t in args {
                 t.apply_mut(ctx)
@@ -505,7 +594,7 @@ impl Type {
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn generalize(&self, ctx: &Context) -> TypeSchema {
+    pub fn generalize(&self, ctx: &Context<N>) -> TypeSchema<N> {
         let fvs = self.free_vars(ctx);
         let mut t = TypeSchema::Monotype(self.clone());
         for v in &fvs {
@@ -535,12 +624,12 @@ impl Type {
     /// assert_eq!(fvs_computed, fvs_expected);
     /// # }
     /// ```
-    pub fn free_vars(&self, ctx: &Context) -> Vec<Variable> {
+    pub fn free_vars(&self, ctx: &Context<N>) -> Vec<Variable> {
         let mut s = HashSet::new();
         self.free_vars_internal(ctx, &mut s);
         s.into_iter().collect()
     }
-    pub fn free_vars_internal(&self, ctx: &Context, s: &mut HashSet<Variable>) {
+    pub fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
         match *self {
             Type::Constructed(_, ref args) => for arg in args {
                 arg.free_vars_internal(ctx, s);
@@ -574,11 +663,11 @@ impl Type {
     /// ```
     ///
     /// [`apply`]: #method.apply
-    pub fn substitute(&self, substitution: &HashMap<Variable, Type>) -> Type {
+    pub fn substitute(&self, substitution: &HashMap<Variable, Type<N>>) -> Type<N> {
         match *self {
-            Type::Constructed(name, ref args) => {
+            Type::Constructed(ref name, ref args) => {
                 let args = args.iter().map(|t| t.substitute(substitution)).collect();
-                Type::Constructed(name, args)
+                Type::Constructed(name.clone(), args)
             }
             Type::Variable(v) => substitution
                 .get(&v)
@@ -589,7 +678,7 @@ impl Type {
     /// Like [`substitute`], but works in-place.
     ///
     /// [`substitute`]: #method.substitute
-    pub fn substitute_mut(&mut self, substitution: &HashMap<Variable, Type>) {
+    pub fn substitute_mut(&mut self, substitution: &HashMap<Variable, Type<N>>) {
         match *self {
             Type::Constructed(_, ref mut args) => for t in args {
                 t.substitute_mut(substitution)
@@ -622,24 +711,24 @@ impl Type {
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
-    /// let t = Type::parse(s).expect("valid type");
+    /// let t: Type<&'static str> = Type::parse(s).expect("valid type");
     /// let round_trip = format!("{}", &t);
     /// assert_eq!(s, round_trip);
     /// # }
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
-    pub fn parse(s: &str) -> Result<Type, ()> {
-        parser::parse(s)
+    pub fn parse(s: &str) -> Result<Type<N>, ()> {
+        parser::parse_type(s)
     }
 }
-impl fmt::Display for Type {
+impl<N: Name> fmt::Display for Type<N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.show(true))
     }
 }
-impl From<VecDeque<Type>> for Type {
-    fn from(mut tps: VecDeque<Type>) -> Type {
+impl<N: Name> From<VecDeque<Type<N>>> for Type<N> {
+    fn from(mut tps: VecDeque<Type<N>>) -> Type<N> {
         match tps.len() {
             0 => panic!("cannot create a type from nothing"),
             1 => tps.pop_front().unwrap(),
@@ -655,23 +744,23 @@ impl From<VecDeque<Type>> for Type {
         }
     }
 }
-impl From<Vec<Type>> for Type {
-    fn from(tps: Vec<Type>) -> Type {
+impl<N: Name> From<Vec<Type<N>>> for Type<N> {
+    fn from(tps: Vec<Type<N>>) -> Type<N> {
         Type::from(VecDeque::from(tps))
     }
 }
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnificationError {
+pub enum UnificationError<N: Name = &'static str> {
     /// `Occurs` happens when occurs checks fail (i.e. a type variable is
     /// unified recursively). The id of the bad type variable is supplied.
     Occurs(Variable),
     /// `Failure` happens when symbols or type variants don't unify because of
     /// structural differences.
-    Failure(Type, Type),
+    Failure(Type<N>, Type<N>),
 }
-impl fmt::Display for UnificationError {
+impl<N: Name> fmt::Display for UnificationError<N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
@@ -679,11 +768,6 @@ impl fmt::Display for UnificationError {
                 write!(f, "Failure({}, {})", t1.show(false), t2.show(false))
             }
         }
-    }
-}
-impl std::error::Error for UnificationError {
-    fn description(&self) -> &str {
-        "could not unify"
     }
 }
 
@@ -694,11 +778,11 @@ impl std::error::Error for UnificationError {
 ///
 /// [`Type`]: enum.Type.html
 #[derive(Debug, Clone)]
-pub struct Context {
-    substitution: HashMap<Variable, Type>,
+pub struct Context<N: Name = &'static str> {
+    substitution: HashMap<Variable, Type<N>>,
     next: Variable,
 }
-impl Default for Context {
+impl<N: Name> Default for Context<N> {
     fn default() -> Self {
         Context {
             substitution: HashMap::new(),
@@ -706,9 +790,9 @@ impl Default for Context {
         }
     }
 }
-impl Context {
+impl<N: Name> Context<N> {
     /// The substitution managed by the context.
-    pub fn substitution(&self) -> &HashMap<Variable, Type> {
+    pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
@@ -716,7 +800,7 @@ impl Context {
     ///
     /// [`Type`]: enum.Type.html
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
-    pub fn extend(&mut self, v: Variable, t: Type) {
+    pub fn extend(&mut self, v: Variable, t: Type<N>) {
         self.substitution.insert(v, t);
     }
     /// Create a new [`Type::Variable`] from the next unused number.
@@ -745,7 +829,7 @@ impl Context {
     /// ```
     ///
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
-    pub fn new_variable(&mut self) -> Type {
+    pub fn new_variable(&mut self) -> Type<N> {
         self.next += 1;
         Type::Variable(self.next - 1)
     }
@@ -817,7 +901,7 @@ impl Context {
     /// [`UnificationError::Failure`]: enum.UnificationError.html#variant.Failure
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
-    pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<(), UnificationError> {
+    pub fn unify(&mut self, t1: &Type<N>, t2: &Type<N>) -> Result<(), UnificationError<N>> {
         let mut t1 = t1.clone();
         let mut t2 = t2.clone();
         t1.apply_mut(self);
@@ -831,14 +915,18 @@ impl Context {
     /// discard the context upon failure.
     ///
     /// [`unify`]: #method.unify
-    pub fn unify_fast(&mut self, mut t1: Type, mut t2: Type) -> Result<(), UnificationError> {
+    pub fn unify_fast(
+        &mut self,
+        mut t1: Type<N>,
+        mut t2: Type<N>,
+    ) -> Result<(), UnificationError<N>> {
         t1.apply_mut(self);
         t2.apply_mut(self);
         self.unify_internal(t1, t2)
     }
     /// unify_internal may mutate the context even with an error. The context on
     /// which it's called should be discarded if there's an error.
-    fn unify_internal(&mut self, t1: Type, t2: Type) -> Result<(), UnificationError> {
+    fn unify_internal(&mut self, t1: Type<N>, t2: Type<N>) -> Result<(), UnificationError<N>> {
         if t1 == t2 {
             return Ok(());
         }
@@ -879,80 +967,95 @@ impl Context {
 }
 
 mod parser {
-    use std::num::ParseIntError;
     use nom::types::CompleteStr;
     use nom::{alpha, digit};
+    use std::marker::PhantomData;
+    use std::num::ParseIntError;
 
-    use super::{Type, TypeSchema};
+    use super::{Name, Type, TypeSchema};
 
     fn nom_u16(inp: CompleteStr) -> Result<u16, ParseIntError> {
         inp.0.parse()
     }
 
-    named!(var<CompleteStr, Type>,
-           do_parse!(tag!("t") >>
-                     num: map_res!(digit, nom_u16) >>
-                     (Type::Variable(num)))
-    );
-    named!(constructed_simple<CompleteStr, Type>,
-           do_parse!(
-               name: alpha >>
-                   (Type::Constructed(leaky_str(name.0), vec![])))
-    );
-    named!(constructed_complex<CompleteStr, Type>,
-           do_parse!(
-               name: alpha >>
-                   args: delimited!(
-                       tag!("("),
-                       separated_list!(tag!(","), ws!(monotype)),
-                       tag!(")")
-                   ) >>
-                   (Type::Constructed(leaky_str(name.0), args)))
-    );
-    named!(arrow<CompleteStr, Type>,
-           do_parse!(alpha: ws!(alt!(parenthetical |
-                                     var |
-                                     constructed_complex |
-                                     constructed_simple)) >>
-                     alt!(tag!("→") | tag!("->")) >>
-                     beta: ws!(monotype) >>
-                     (Type::arrow(alpha, beta)))
-    );
-    named!(parenthetical<CompleteStr, Type>,
-           delimited!(tag!("("), arrow, tag!(")"))
-    );
-    named!(binding<CompleteStr, TypeSchema>,
-           do_parse!(opt!(tag!("∀")) >>
-                     tag!("t") >>
-                     variable: map_res!(digit, nom_u16) >>
-                     ws!(tag!(".")) >>
-                     body: map!(polytype, Box::new) >>
-                     (TypeSchema::Polytype{variable, body}))
-    );
-    named!(monotype<CompleteStr, Type>,
-           alt!(arrow | var | constructed_complex | constructed_simple)
-    );
-    named!(polytype<CompleteStr, TypeSchema>,
-           alt!(map!(monotype, TypeSchema::Monotype) | binding)
-    );
-
-    pub fn parse(input: &str) -> Result<Type, ()> {
-        parsem(input)
+    // hack for polymorphism with nom
+    pub struct Parser<N: Name>(PhantomData<N>);
+    impl<N: Name> Default for Parser<N> {
+        fn default() -> Self {
+            Parser(PhantomData)
+        }
     }
-    pub fn parsem(input: &str) -> Result<Type, ()> {
-        match monotype(CompleteStr(input)) {
+    impl<N: Name> Parser<N> {
+        method!(
+            var<Parser<N>, CompleteStr, Type<N>>,
+            self,
+            do_parse!(tag!("t") >> num: map_res!(digit, nom_u16) >> (Type::Variable(num)))
+        );
+        method!(
+            constructed_simple<Parser<N>, CompleteStr, Type<N>>,
+            self,
+            do_parse!(
+                name_raw: alpha >> name: expr_res!(N::parse(name_raw.0))
+                    >> (Type::Constructed(name, vec![]))
+            )
+        );
+        method!(constructed_complex<Parser<N>, CompleteStr, Type<N>>, mut self,
+               do_parse!(
+                   name_raw: alpha >>
+                   name: expr_res!(N::parse(name_raw.0)) >>
+                   tag!("(") >>
+                   args: separated_list!(tag!(","), ws!(call_m!(self.monotype))) >>
+                   tag!(")") >>
+                   (Type::Constructed(name, args)))
+        );
+        method!(arrow<Parser<N>, CompleteStr, Type<N>>, mut self,
+               do_parse!(
+                   alpha: ws!(alt!(call_m!(self.parenthetical) |
+                                   call_m!(self.var) |
+                                   call_m!(self.constructed_complex) |
+                                   call_m!(self.constructed_simple))) >>
+                   alt!(tag!("→") | tag!("->")) >>
+                   beta: ws!(call_m!(self.monotype)) >>
+                   (Type::arrow(alpha, beta)))
+        );
+        method!(parenthetical<Parser<N>, CompleteStr, Type<N>>, mut self,
+               do_parse!(
+                   tag!("(") >>
+                   interior: call_m!(self.arrow) >>
+                   tag!(")") >>
+                   (interior))
+        );
+        method!(binding<Parser<N>, CompleteStr, TypeSchema<N>>, mut self,
+               do_parse!(
+                   opt!(tag!("∀")) >>
+                   tag!("t") >>
+                   variable: map_res!(digit, nom_u16) >>
+                   ws!(tag!(".")) >>
+                   body: map!(call_m!(self.polytype), Box::new) >>
+                   (TypeSchema::Polytype{variable, body}))
+        );
+        method!(monotype<Parser<N>, CompleteStr, Type<N>>, mut self,
+               alt!(call_m!(self.arrow) |
+                    call_m!(self.var) |
+                    call_m!(self.constructed_complex) |
+                    call_m!(self.constructed_simple))
+        );
+        method!(polytype<Parser<N>, CompleteStr, TypeSchema<N>>, mut self,
+               alt!(map!(call_m!(self.monotype), TypeSchema::Monotype) |
+                    call_m!(self.binding))
+        );
+    }
+
+    pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ()> {
+        match Parser::default().monotype(CompleteStr(input)).1 {
             Ok((_, t)) => Ok(t),
             _ => Err(()),
         }
     }
-    pub fn parsep(input: &str) -> Result<TypeSchema, ()> {
-        match polytype(CompleteStr(input)) {
+    pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ()> {
+        match Parser::default().polytype(CompleteStr(input)).1 {
             Ok((_, t)) => Ok(t),
             _ => Err(()),
         }
-    }
-
-    fn leaky_str(s: &str) -> &'static str {
-        unsafe { &mut *Box::into_raw(s.to_string().into_boxed_str()) }
     }
 }
