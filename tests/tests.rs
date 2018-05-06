@@ -14,15 +14,13 @@ fn test_tp_macro() {
         tp!(list(tp!(tuple(tp!(bool), tp!(int))))),
         Type::Constructed(
             "list",
-            vec![
-                Type::Constructed(
-                    "tuple",
-                    vec![
-                        Type::Constructed("bool", vec![]),
-                        Type::Constructed("int", vec![]),
-                    ],
-                ),
-            ]
+            vec![Type::Constructed(
+                "tuple",
+                vec![
+                    Type::Constructed("bool", vec![]),
+                    Type::Constructed("int", vec![]),
+                ],
+            )],
         ),
     );
     assert_eq!(
@@ -49,7 +47,7 @@ fn test_tp_macro() {
                     Type::Constructed("int", vec![]),
                     Type::arrow(Type::Variable(0), Type::Constructed("bool", vec![])),
                 ),
-            ]
+            ],
         )
     );
     // arrows
@@ -62,7 +60,7 @@ fn test_tp_macro() {
         tp!(@arrow[Type::Variable(0), Type::Variable(1), Type::Variable(2)]),
         Type::arrow(
             Type::Variable(0),
-            Type::arrow(Type::Variable(1), Type::Variable(2))
+            Type::arrow(Type::Variable(1), Type::Variable(2)),
         )
     );
     assert_eq!(
@@ -76,8 +74,8 @@ fn test_tp_macro() {
             Type::Variable(0),
             Type::arrow(
                 Type::Variable(1),
-                Type::arrow(Type::Variable(2), Type::Variable(3))
-            )
+                Type::arrow(Type::Variable(2), Type::Variable(3)),
+            ),
         )
     );
 }
@@ -92,7 +90,7 @@ fn test_ptp_macro() {
         ptp!(list(tp!(bool))),
         TypeSchema::Monotype(Type::Constructed(
             "list",
-            vec![Type::Constructed("bool", vec![])]
+            vec![Type::Constructed("bool", vec![])],
         ))
     );
     assert_eq!(
@@ -108,7 +106,7 @@ fn test_ptp_macro() {
             variable: 0,
             body: Box::new(TypeSchema::Monotype(Type::Constructed(
                 "→",
-                vec![Type::Variable(0), Type::Variable(0)]
+                vec![Type::Variable(0), Type::Variable(0)],
             ))),
         }
     );
@@ -258,12 +256,10 @@ fn test_unify_nonstring_name() {
     ctx.unify(
         &Type::Constructed(
             N(3),
-            vec![
-                Type::arrow(
-                    Type::Constructed(N(1), vec![]),
-                    Type::Constructed(N(2), vec![]),
-                ),
-            ],
+            vec![Type::arrow(
+                Type::Constructed(N(1), vec![]),
+                Type::Constructed(N(2), vec![]),
+            )],
         ),
         &t,
     ).expect("nonstring one side polymorphic");
