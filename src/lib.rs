@@ -262,7 +262,7 @@ impl<N: Name> TypeSchema<N> {
         self.free_vars_internal(ctx, &mut s);
         s.into_iter().collect()
     }
-    pub fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
+    fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
         match *self {
             TypeSchema::Monotype(ref t) => t.free_vars_internal(ctx, s),
             TypeSchema::Polytype { variable, ref body } => {
@@ -630,7 +630,7 @@ impl<N: Name> Type<N> {
         self.free_vars_internal(ctx, &mut s);
         s.into_iter().collect()
     }
-    pub fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
+    fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
         match *self {
             Type::Constructed(_, ref args) => for arg in args {
                 arg.free_vars_internal(ctx, s);
