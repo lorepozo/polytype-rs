@@ -19,7 +19,7 @@ pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ()> {
 }
 
 fn nom_u16(inp: CompleteStr) -> Result<u16, ParseIntError> {
-    inp.0.parse()
+    inp.parse()
 }
 
 // hack for polymorphism with nom
@@ -39,14 +39,14 @@ impl<N: Name> Parser<N> {
         constructed_simple<Parser<N>, CompleteStr, Type<N>>,
         self,
         do_parse!(
-            name_raw: alpha >> name: expr_res!(N::parse(name_raw.0))
+            name_raw: alpha >> name: expr_res!(N::parse(&name_raw))
                 >> (Type::Constructed(name, vec![]))
         )
     );
     method!(constructed_complex<Parser<N>, CompleteStr, Type<N>>, mut self,
                do_parse!(
                    name_raw: alpha >>
-                   name: expr_res!(N::parse(name_raw.0)) >>
+                   name: expr_res!(N::parse(&name_raw)) >>
                    tag!("(") >>
                    args: separated_list!(tag!(","), ws!(call_m!(self.monotype))) >>
                    tag!(")") >>

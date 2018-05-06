@@ -13,4 +13,4 @@ categories = ["science", "data-structures", "algorithms"]
 
 [dependencies]
 itertools = "0.7"
-nom = "4.0.0-beta2"
+nom = "4.0.0-beta3"
