@@ -623,7 +623,8 @@ impl<N: Name> Type<N> {
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
-    /// let vs_computed = t.vars();
+    /// let mut vs_computed = t.vars();
+    /// vs_computed.sort();
     /// let vs_expected = vec![0, 1];
     ///
     /// assert_eq!(vs_computed, vs_expected);
