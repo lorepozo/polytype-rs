@@ -264,7 +264,7 @@ impl<N: Name> TypeSchema<N> {
     }
     fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
         match *self {
-            TypeSchema::Monotype(ref t) => t.free_vars_internal(ctx, s),
+            TypeSchema::Monotype(ref t) => t.vars_internal(s),
             TypeSchema::Polytype { variable, ref body } => {
                 body.free_vars_internal(ctx, s);
                 s.remove(&variable);
@@ -588,25 +588,31 @@ impl<N: Name> Type<N> {
     ///
     /// let mut ctx = Context::default();
     /// ctx.extend(0, tp!(int));
-    /// let t_gen = t.apply(&ctx).generalize(&ctx);
     ///
+    /// let t_gen = t.apply(&ctx).generalize(vec![]);
     /// assert_eq!(format!("{}", t_gen), "∀t1. int → t1");
+    ///
+    /// let t_gen = t.apply(&ctx).generalize(vec![1]);
+    /// assert_eq!(format!("{}", t_gen), "int → t1");
     /// # }
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn generalize(&self, ctx: &Context<N>) -> TypeSchema<N> {
-        let fvs = self.free_vars(ctx);
+    pub fn generalize(&self, bound: Vec<Variable>) -> TypeSchema<N> {
+        let fvs = self.vars()
+            .into_iter()
+            .filter(|x| !bound.contains(x))
+            .collect::<Vec<Variable>>();
         let mut t = TypeSchema::Monotype(self.clone());
-        for v in &fvs {
+        for v in fvs {
             t = TypeSchema::Polytype {
-                variable: *v,
+                variable: v,
                 body: Box::new(t),
             };
         }
         t
     }
-    /// Compute all the free variables in a type.
+    /// Compute all the variables in a type.
     ///
     /// # Examples
     ///
@@ -617,28 +623,24 @@ impl<N: Name> Type<N> {
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(format!("{}", &t), "t0 → t1");
     ///
-    /// let mut ctx = Context::default();
-    /// ctx.extend(0, tp!(int));
-    /// let fvs_computed = t.free_vars(&ctx);
-    /// let fvs_expected = vec![1];
+    /// let vs_computed = t.vars();
+    /// let vs_expected = vec![0, 1];
     ///
-    /// assert_eq!(fvs_computed, fvs_expected);
+    /// assert_eq!(vs_computed, vs_expected);
     /// # }
     /// ```
-    pub fn free_vars(&self, ctx: &Context<N>) -> Vec<Variable> {
+    pub fn vars(&self) -> Vec<Variable> {
         let mut s = HashSet::new();
-        self.free_vars_internal(ctx, &mut s);
+        self.vars_internal(&mut s);
         s.into_iter().collect()
     }
-    fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
+    fn vars_internal(&self, s: &mut HashSet<Variable>) {
         match *self {
             Type::Constructed(_, ref args) => for arg in args {
-                arg.free_vars_internal(ctx, s);
+                arg.vars_internal(s);
             },
             Type::Variable(v) => {
-                if !ctx.substitution.contains_key(&v) {
-                    s.insert(v);
-                }
+                s.insert(v);
             }
         }
     }
