@@ -589,16 +589,16 @@ impl<N: Name> Type<N> {
     /// let mut ctx = Context::default();
     /// ctx.extend(0, tp!(int));
     ///
-    /// let t_gen = t.apply(&ctx).generalize(vec![]);
+    /// let t_gen = t.apply(&ctx).generalize(&[]);
     /// assert_eq!(format!("{}", t_gen), "∀t1. int → t1");
     ///
-    /// let t_gen = t.apply(&ctx).generalize(vec![1]);
+    /// let t_gen = t.apply(&ctx).generalize(&[1]);
     /// assert_eq!(format!("{}", t_gen), "int → t1");
     /// # }
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn generalize(&self, bound: Vec<Variable>) -> TypeSchema<N> {
+    pub fn generalize(&self, bound: &[Variable]) -> TypeSchema<N> {
         let fvs = self.vars()
             .into_iter()
             .filter(|x| !bound.contains(x))
