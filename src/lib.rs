@@ -463,10 +463,34 @@ pub enum Type<N: Name = &'static str> {
 }
 impl<N: Name> Type<N> {
     /// Construct a function type (i.e. `alpha` → `beta`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let t = Type::arrow(tp!(int), tp!(bool));
+    /// assert_eq!(t.to_string(), "int → bool");
+    /// # }
+    /// ```
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
     }
     /// If the type is an arrow, get its associated argument and return types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
+    /// if let Some((left, right)) = t.as_arrow() {
+    ///     assert_eq!(left.to_string(), "int");
+    ///     assert_eq!(right.to_string(), "int → bool");
+    /// } else { unreachable!() }
+    /// # }
+    /// ```
     pub fn as_arrow(&self) -> Option<(&Type<N>, &Type<N>)> {
         match *self {
             Type::Constructed(ref n, ref args) if n.is_arrow() => Some((&args[0], &args[1])),
@@ -507,6 +531,20 @@ impl<N: Name> Type<N> {
         }
     }
     /// If the type is an arrow, recursively get all curried function arguments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
+    /// if let Some(args) = t.args() {
+    ///     assert_eq!(args.len(), 2);
+    ///     assert_eq!(args[0].to_string(), "int");
+    ///     assert_eq!(args[1].to_string(), "int");
+    /// } else { unreachable!() }
+    /// # }
+    /// ```
     pub fn args(&self) -> Option<VecDeque<&Type<N>>> {
         match *self {
             Type::Constructed(ref n, ref args) if n.is_arrow() => {
@@ -528,6 +566,18 @@ impl<N: Name> Type<N> {
         }
     }
     /// If the type is an arrow, get its ultimate return type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
+    /// if let Some(ret) = t.returns() {
+    ///     assert_eq!(ret.to_string(), "bool");
+    /// } else { unreachable!() }
+    /// # }
+    /// ```
     pub fn returns(&self) -> Option<&Type<N>> {
         match *self {
             Type::Constructed(ref n, ref args) if n.is_arrow() => {
