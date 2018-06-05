@@ -264,6 +264,17 @@ impl<N: Name> TypeSchema<N> {
     }
     /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
+    /// let mut free = t.free_vars();
+    /// free.sort();
+    /// assert_eq!(free, vec![2, 3]);
+    /// # }
+    /// ```
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn free_vars(&self) -> Vec<Variable> {
