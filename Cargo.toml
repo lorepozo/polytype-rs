@@ -1,6 +1,6 @@
 [package]
 name = "polytype"
-version = "4.2.1"
+version = "5.0.0"
 authors = ["Lucas Morales <lucas@lucasem.com>"]
 license = "MIT"
 readme = "README.md"
@@ -13,4 +13,4 @@ categories = ["science", "data-structures", "algorithms"]
 
 [dependencies]
 itertools = "0.7"
-nom = "4.0.0-beta3"
+nom = "4.0.0"
