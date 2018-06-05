@@ -28,17 +28,17 @@
 //! ]);
 //!
 //! // Quantified type schemas provide polymorphic behavior.
-//! assert_eq!(format!("{}", &t), "∀t0. (t0 → bool) → list(t0) → list(t0)");
+//! assert_eq!(t.to_string(), "∀t0. (t0 → bool) → list(t0) → list(t0)");
 //!
 //! // We can instantiate type schemas to remove quantifiers
 //! let mut ctx = Context::default();
 //! let t = t.instantiate(&mut ctx);
-//! assert_eq!(format!("{}", &t), "(t0 → bool) → list(t0) → list(t0)");
+//! assert_eq!(t.to_string(), "(t0 → bool) → list(t0) → list(t0)");
 //!
 //! // We can register a substiution for t0 in the context:
 //! ctx.extend(0, tp!(int));
 //! let t = t.apply(&ctx);
-//! assert_eq!(format!("{}", &t), "(int → bool) → list(int) → list(int)");
+//! assert_eq!(t.to_string(), "(int → bool) → list(int) → list(int)");
 //! # }
 //! ```
 //!
@@ -57,7 +57,7 @@
 //!     tp!(list(tp!(0))),
 //!     tp!(1),
 //! ]);
-//! assert_eq!(format!("{}", &t), "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1");
+//! assert_eq!(t.to_string(), "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
 //! // Let's consider reduce when applied to a function that adds two ints
 //!
@@ -66,12 +66,12 @@
 //!
 //! // Let's create a type representing binary addition.
 //! let tplus = tp!(@arrow[tp!(int), tp!(int), tp!(int)]);
-//! assert_eq!(format!("{}", &tplus), "int → int → int");
+//! assert_eq!(tplus.to_string(), "int → int → int");
 //!
 //! // We instantiate the type schema of reduce within our context
 //! // so new type variables will be distinct
 //! let t = t.instantiate(&mut ctx);
-//! assert_eq!(format!("{}", &t), "(t1 → t0 → t1) → t1 → list(t0) → t1");
+//! assert_eq!(t.to_string(), "(t1 → t0 → t1) → t1 → list(t0) → t1");
 //!
 //! // By unifying, we can ensure function applications obey type requirements.
 //! let treturn = ctx.new_variable();
@@ -94,7 +94,7 @@
 //!
 //! // Finally, we can see what form reduce takes by applying the new substitution
 //! let t = t.apply(&ctx);
-//! assert_eq!(format!("{}", &t), "(int → int → int) → int → list(int) → int");
+//! assert_eq!(t.to_string(), "(int → int → int) → int → list(int) → int");
 //! # }
 //! ```
 //!
@@ -288,8 +288,8 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// let t1 = t1.instantiate(&mut ctx);
     /// let t2 = t2.instantiate(&mut ctx);
-    /// assert_eq!(format!("{}", &t1), "list(t0)");
-    /// assert_eq!(format!("{}", &t2), "list(t1)");
+    /// assert_eq!(t1.to_string(), "list(t0)");
+    /// assert_eq!(t2.to_string(), "list(t1)");
     /// # }
     /// ```
     ///
@@ -350,7 +350,7 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
     /// let t: TypeSchema<&'static str> = TypeSchema::parse(s).expect("valid type");
-    /// let round_trip = format!("{}", &t);
+    /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
     /// # }
     /// ```
@@ -389,7 +389,7 @@ pub enum Type<N: Name = &'static str> {
     /// ```
     /// # use polytype::Type;
     /// let tint = Type::Constructed("int", vec![]);
-    /// assert_eq!(format!("{}", &tint), "int")
+    /// assert_eq!(tint.to_string(), "int")
     /// ```
     ///
     /// Composites have associated types:
@@ -398,7 +398,7 @@ pub enum Type<N: Name = &'static str> {
     /// # use polytype::Type;
     /// let tint = Type::Constructed("int", vec![]);
     /// let tlist_of_ints = Type::Constructed("list", vec![tint]);
-    /// assert_eq!(format!("{}", &tlist_of_ints), "list(int)");
+    /// assert_eq!(tlist_of_ints.to_string(), "list(int)");
     /// ```
     ///
     /// With the macros:
@@ -407,7 +407,7 @@ pub enum Type<N: Name = &'static str> {
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
     /// let t = tp!(list(tp!(int)));
-    /// assert_eq!(format!("{}", &t), "list(int)");
+    /// assert_eq!(t.to_string(), "list(int)");
     /// # }
     /// ```
     Constructed(N, Vec<Type<N>>),
@@ -421,7 +421,7 @@ pub enum Type<N: Name = &'static str> {
     /// # use polytype::Type;
     /// // any function: α → β
     /// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1)]);
-    /// assert_eq!(format!("{}", &t), "t0 → t1");
+    /// assert_eq!(t.to_string(), "t0 → t1");
     /// # }
     /// ```
     ///
@@ -436,7 +436,7 @@ pub enum Type<N: Name = &'static str> {
     ///     tp!(list(tp!(0))),
     ///     tp!(list(tp!(1))),
     /// ]);
-    /// assert_eq!(format!("{}", &t), "(t0 → t1) → list(t0) → list(t1)");
+    /// assert_eq!(t.to_string(), "(t0 → t1) → list(t0) → list(t1)");
     /// # }
     /// ```
     Variable(Variable),
@@ -540,9 +540,9 @@ impl<N: Name> Type<N> {
     /// ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
     ///
     /// let t = tp!(list(tp!(0)));
-    /// assert_eq!(format!("{}", &t), "list(t0)");
+    /// assert_eq!(t.to_string(), "list(t0)");
     /// let t = t.apply(&ctx);
-    /// assert_eq!(format!("{}", &t), "list(int)");
+    /// assert_eq!(t.to_string(), "list(int)");
     /// # }
     /// ```
     ///
@@ -584,16 +584,16 @@ impl<N: Name> Type<N> {
     /// # fn main() {
     /// # use polytype::{Context, Type};
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(format!("{}", &t), "t0 → t1");
+    /// assert_eq!(t.to_string(), "t0 → t1");
     ///
     /// let mut ctx = Context::default();
     /// ctx.extend(0, tp!(int));
     ///
     /// let t_gen = t.apply(&ctx).generalize(&[]);
-    /// assert_eq!(format!("{}", t_gen), "∀t1. int → t1");
+    /// assert_eq!(t_gen.to_string(), "∀t1. int → t1");
     ///
     /// let t_gen = t.apply(&ctx).generalize(&[1]);
-    /// assert_eq!(format!("{}", t_gen), "int → t1");
+    /// assert_eq!(t_gen.to_string(), "int → t1");
     /// # }
     /// ```
     ///
@@ -621,7 +621,7 @@ impl<N: Name> Type<N> {
     /// # fn main() {
     /// # use polytype::{Context, Type};
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(format!("{}", &t), "t0 → t1");
+    /// assert_eq!(t.to_string(), "t0 → t1");
     ///
     /// let mut vs_computed = t.vars();
     /// vs_computed.sort();
@@ -654,14 +654,14 @@ impl<N: Name> Type<N> {
     /// # use polytype::Type;
     /// # use std::collections::HashMap;
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(format!("{}", &t), "t0 → t1");
+    /// assert_eq!(t.to_string(), "t0 → t1");
     ///
     /// let mut substitution = HashMap::new();
     /// substitution.insert(0, tp!(int));
     /// substitution.insert(1, tp!(bool));
     /// let t = t.substitute(&substitution);
     ///
-    /// assert_eq!(format!("{}", t), "int → bool");
+    /// assert_eq!(t.to_string(), "int → bool");
     /// # }
     /// ```
     ///
@@ -715,7 +715,7 @@ impl<N: Name> Type<N> {
     ///
     /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
     /// let t: Type<&'static str> = Type::parse(s).expect("valid type");
-    /// let round_trip = format!("{}", &t);
+    /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
     /// # }
     /// ```
@@ -826,7 +826,7 @@ impl<N: Name> Context<N> {
     /// // Instantiating a polytype will yield new variables
     /// let t = ptp!(0, 1; @arrow[tp!(0), tp!(1), tp!(1)]);
     /// let t = t.instantiate(&mut ctx);
-    /// assert_eq!(format!("{}", t), "t1 → t2 → t2");
+    /// assert_eq!(t.to_string(), "t1 → t2 → t2");
     ///
     /// // Get another fresh variable
     /// let t3 = ctx.new_variable();

@@ -46,9 +46,9 @@ let mut ctx = Context::default();
 ctx.extend(0, tp!(int));
 
 let t = tp!(list(tp!(0)));
-assert_eq!(format!("{}", &t), "list(t0)");
+assert_eq!(t.to_string(), "list(t0)");
 let t = t.apply(&ctx);
-assert_eq!(format!("{}", &t), "list(int)");
+assert_eq!(t.to_string(), "list(int)");
 ```
 
 Instantiate a `TypeSchema`:
@@ -62,8 +62,8 @@ let schema = ptp!(3; tp!(list(tp!(3))));
 // They instantiate to new fresh type variables
 let t1 = schema.instantiate(&mut ctx);
 let t2 = schema.instantiate(&mut ctx);
-assert_eq!(format!("{}", &t1), "list(t0)");
-assert_eq!(format!("{}", &t2), "list(t1)");
+assert_eq!(t1.to_string(), "list(t0)");
+assert_eq!(t2.to_string(), "list(t1)");
 ```
 
 See the [documentation](https://docs.rs/polytype) for more details.
