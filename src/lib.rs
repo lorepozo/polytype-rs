@@ -625,10 +625,9 @@ impl<N: Name> Type<N> {
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(t.to_string(), "t0 → t1");
     ///
-    /// let mut vs_computed = t.vars();
-    /// vs_computed.sort();
-    ///
-    /// assert_eq!(vs_computed, vec![0, 1]);
+    /// let mut vars = t.vars();
+    /// vars.sort();
+    /// assert_eq!(vars, vec![0, 1]);
     /// # }
     /// ```
     pub fn vars(&self) -> Vec<Variable> {
