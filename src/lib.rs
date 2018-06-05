@@ -804,6 +804,9 @@ impl<N: Name> Context<N> {
     /// [`Type`]: enum.Type.html
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
     pub fn extend(&mut self, v: Variable, t: Type<N>) {
+        if v >= self.next {
+            self.next = v + 1
+        }
         self.substitution.insert(v, t);
     }
     /// Create a new [`Type::Variable`] from the next unused number.
