@@ -220,6 +220,25 @@ pub enum TypeSchema<N: Name = &'static str> {
     },
 }
 impl<N: Name> TypeSchema<N> {
+    /// Checks whether a variable is bound in the quantification of a polytype.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// let t = ptp!(0; @arrow[tp!(0), tp!(1)]); // ∀α. α → β
+    /// assert!(t.is_bound(0));
+    /// assert!(!t.is_bound(1));
+    /// # }
+    /// ```
+    pub fn is_bound(&self, v: Variable) -> bool {
+        match *self {
+            TypeSchema::Monotype(_) => false,
+            TypeSchema::Polytype { variable, .. } if variable == v => true,
+            TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
+        }
+    }
     /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
     ///
     /// # Examples
@@ -227,17 +246,14 @@ impl<N: Name> TypeSchema<N> {
     /// ```
     /// # #[macro_use] extern crate polytype;
     /// # fn main() {
-    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]);
-    /// assert_eq!(
-    ///     t.bound_variables(),
-    ///     vec![0, 1],
-    /// );
+    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
+    /// assert_eq!(t.bound_vars(), vec![0, 1]);
     /// # }
     /// ```
     ///
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn bound_variables(&self) -> Vec<Variable> {
+    pub fn bound_vars(&self) -> Vec<Variable> {
         let mut t = self;
         let mut bvs = Vec::new();
         while let TypeSchema::Polytype { variable, ref body } = *t {
@@ -245,13 +261,6 @@ impl<N: Name> TypeSchema<N> {
             t = body
         }
         bvs
-    }
-    pub fn is_bound(&self, v: Variable) -> bool {
-        match *self {
-            TypeSchema::Monotype(_) => false,
-            TypeSchema::Polytype { variable, .. } if variable == v => true,
-            TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
-        }
     }
     /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
     ///
