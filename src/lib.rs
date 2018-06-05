@@ -612,7 +612,7 @@ impl<N: Name> Type<N> {
         }
         t
     }
-    /// Compute all the variables in a type.
+    /// Compute all the variables present in a type.
     ///
     /// # Examples
     ///
@@ -625,9 +625,8 @@ impl<N: Name> Type<N> {
     ///
     /// let mut vs_computed = t.vars();
     /// vs_computed.sort();
-    /// let vs_expected = vec![0, 1];
     ///
-    /// assert_eq!(vs_computed, vs_expected);
+    /// assert_eq!(vs_computed, vec![0, 1]);
     /// # }
     /// ```
     pub fn vars(&self) -> Vec<Variable> {
