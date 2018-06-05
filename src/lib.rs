@@ -257,16 +257,16 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn free_vars(&self, ctx: &Context<N>) -> Vec<Variable> {
+    pub fn free_vars(&self) -> Vec<Variable> {
         let mut s = HashSet::new();
-        self.free_vars_internal(ctx, &mut s);
+        self.free_vars_internal(&mut s);
         s.into_iter().collect()
     }
-    fn free_vars_internal(&self, ctx: &Context<N>, s: &mut HashSet<Variable>) {
+    fn free_vars_internal(&self, s: &mut HashSet<Variable>) {
         match *self {
             TypeSchema::Monotype(ref t) => t.vars_internal(s),
             TypeSchema::Polytype { variable, ref body } => {
-                body.free_vars_internal(ctx, s);
+                body.free_vars_internal(s);
                 s.remove(&variable);
             }
         }
