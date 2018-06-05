@@ -1,6 +1,6 @@
 //! A [Hindley-Milner polymorphic typing system].
 //!
-//! For brevity, the documentation heavily uses the three provided macros when
+//! For brevity, the documentation heavily uses the two provided macros when
 //! creating types.
 //!
 //! A [`TypeSchema`] is a type that may have universally quantified type
