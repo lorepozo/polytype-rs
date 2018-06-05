@@ -477,6 +477,23 @@ impl<N: Name> Type<N> {
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
     }
+    /// Construct a function type (i.e. `alpha` → `beta`).
+    pub fn multi_arrow(mut args: Vec<Type<N>>) -> Result<Type<N>, ()> {
+        if args.len() == 0 {
+            return Err(());
+        }
+        let mut result = args.pop().unwrap();
+        loop {
+            match args.pop() {
+                None => {
+                    return Ok(result);
+                }
+                Some(arg) => {
+                    result = Type::Constructed(N::arrow(), vec![arg, result]);
+                }
+            }
+        }
+    }
     /// If the type is an arrow, get its associated argument and return types.
     ///
     /// # Examples
