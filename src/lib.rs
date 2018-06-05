@@ -660,8 +660,8 @@ impl<N: Name> Type<N> {
     /// let mut substitution = HashMap::new();
     /// substitution.insert(0, tp!(int));
     /// substitution.insert(1, tp!(bool));
-    /// let t = t.substitute(&substitution);
     ///
+    /// let t = t.substitute(&substitution);
     /// assert_eq!(t.to_string(), "int → bool");
     /// # }
     /// ```
