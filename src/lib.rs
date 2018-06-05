@@ -575,7 +575,9 @@ impl<N: Name> Type<N> {
             }
         }
     }
-    /// Generalizes the type by binding free variables in a [`TypeSchema`].
+    /// Generalizes the type by quantifying over free variables in a [`TypeSchema`].
+    ///
+    /// Variables specified by `bound` remain unquantified.
     ///
     /// # Examples
     ///
