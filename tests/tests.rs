@@ -279,26 +279,26 @@ fn test_unify_nonstring_name() {
 fn test_parse() {
     let t = tp!(int);
     assert_eq!(&t, &Type::parse("int").expect("parse 1"));
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 2"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 2"));
 
     let t = tp!(0);
     assert_eq!(&t, &Type::parse("t0").expect("parse 3"));
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 4"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 4"));
 
     let t = tp!(@arrow[tp!(int), tp!(int)]);
     assert_eq!(&t, &Type::parse("int -> int").expect("parse 5"));
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 6"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 6"));
 
     let t = tp!(list(tp!(@arrow[tp!(int), tp!(2)])));
     assert_eq!(&t, &Type::parse("list(int -> t2)").expect("parse 7"));
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 8"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 8"));
 
     let t = tp!(hashmap(tp!(str), tp!(@arrow[tp!(int), tp!(0), tp!(bool)])));
     assert_eq!(
         &t,
         &Type::parse("hashmap(str, int -> t0 -> bool)").expect("parse 9")
     );
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 10"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 10"));
 
     let t = tp!(@arrow[
         tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
@@ -310,5 +310,5 @@ fn test_parse() {
         &t,
         &Type::parse("(t1 → t0 → t1) → t1 → list(t0) → t1").expect("parse 11")
     );
-    assert_eq!(t, Type::parse(&format!("{}", t)).expect("parse 12"));
+    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 12"));
 }
