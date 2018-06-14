@@ -1041,4 +1041,62 @@ impl<N: Name> Context<N> {
             }
         }
     }
+    /// Merge two type contexts. Every `Type` that corresponds to the `other` context must be
+    /// reified using [`ContextChange::reify`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::{Type, Context};
+    /// # fn main() {
+    /// let mut ctx = Context::default();
+    /// let a = ctx.new_variable();
+    /// let b = ctx.new_variable();
+    /// ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)])).unwrap();
+    /// // ctx uses t0 and t1
+    ///
+    /// let mut ctx2 = Context::default();
+    /// let pt = ptp!(0, 1; @arrow[tp!(0), tp!(1)]);
+    /// let mut t = pt.instantiate(&mut ctx2);
+    /// ctx2.extend(0, tp!(bool));
+    /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
+    /// // ctx2 uses t0 and t1
+    ///
+    /// let ctx_change = ctx.merge(ctx2);
+    /// // rewrite all terms under ctx2 using ctx_change
+    /// ctx_change.reify(&mut t);
+    /// assert_eq!(t.to_string(), "t2 → t3");
+    /// assert_eq!(t.apply(&ctx).to_string(), "bool → t3");
+    ///
+    /// assert_eq!(ctx.new_variable(), tp!(4));
+    /// # }
+    /// ```
+    ///
+    /// [`ContextChange::reify`]: struct.ContextChange.html#method.reify
+    pub fn merge(&mut self, other: Context<N>) -> ContextChange {
+        let delta = self.next;
+        for (v, tp) in other.substitution {
+            self.substitution.insert(delta + v, tp);
+        }
+        self.next += other.next;
+        ContextChange { delta }
+    }
+}
+
+/// Allow types to be reified for use in a different context. See [`Context::merge`].
+///
+/// [`Context::merge`]: struct.Context.html#method.merge
+pub struct ContextChange {
+    delta: u16,
+}
+impl ContextChange {
+    pub fn reify(&self, tp: &mut Type) {
+        match tp {
+            Type::Constructed(_, args) => for arg in args {
+                self.reify(arg)
+            },
+            Type::Variable(n) => *n += self.delta,
+        }
+    }
 }
