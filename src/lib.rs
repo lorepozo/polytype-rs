@@ -478,8 +478,25 @@ impl<N: Name> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
     }
     /// Construct a function type from each item in `args` (i.e. args[0] → args[1] → args[2] → ... → args[n]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
+    /// let t = Type::multi_arrow(v);
+    /// assert_eq!(t, Ok(Type::arrow(tp!(int), Type::arrow(tp!(int), tp!(bool)))));
+    /// assert_eq!(t.unwrap().to_string(), "int → int → bool");
+    ///
+    /// let v: Vec<Type<&'static str>> = vec![];
+    /// let t = Type::multi_arrow(v);
+    /// assert_eq!(t, Err(()));
+    /// # }
+    /// ```
     pub fn multi_arrow(mut args: Vec<Type<N>>) -> Result<Type<N>, ()> {
-        if args.len() == 0 {
+        if args.is_empty() {
             return Err(());
         }
         let mut result = args.pop().unwrap();
