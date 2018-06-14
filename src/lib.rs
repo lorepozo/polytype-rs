@@ -477,7 +477,7 @@ impl<N: Name> Type<N> {
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
     }
-    /// Construct a function type (i.e. `alpha` → `beta`).
+    /// Construct a function type from each item in `args` (i.e. args[0] → args[1] → args[2] → ... → args[n]).
     pub fn multi_arrow(mut args: Vec<Type<N>>) -> Result<Type<N>, ()> {
         if args.len() == 0 {
             return Err(());
@@ -868,7 +868,7 @@ impl<N: Name> fmt::Display for UnificationError<N> {
 /// Contexts track substitutions and generate fresh type variables.
 ///
 /// [`Type`]: enum.Type.html
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
     substitution: HashMap<Variable, Type<N>>,
     next: Variable,
@@ -885,6 +885,12 @@ impl<N: Name> Context<N> {
     /// The substitution managed by the context.
     pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
+    }
+    /// Reset the substitution to the empty substitution while leaving its ability to generate fresh [`Variable`]s intact.
+    ///
+    /// [`Variable`]: type.Variable.html
+    pub fn reset(&mut self) {
+        self.substitution = HashMap::new();
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
