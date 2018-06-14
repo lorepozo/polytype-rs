@@ -477,6 +477,40 @@ impl<N: Name> Type<N> {
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
     }
+    /// Construct a function type from each item in `args` (i.e. args[0] → args[1] → args[2] → ... → args[n]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
+    /// let t = Type::multi_arrow(v);
+    /// assert_eq!(t, Ok(Type::arrow(tp!(int), Type::arrow(tp!(int), tp!(bool)))));
+    /// assert_eq!(t.unwrap().to_string(), "int → int → bool");
+    ///
+    /// let v: Vec<Type<&'static str>> = vec![];
+    /// let t = Type::multi_arrow(v);
+    /// assert_eq!(t, Err(()));
+    /// # }
+    /// ```
+    pub fn multi_arrow(mut args: Vec<Type<N>>) -> Result<Type<N>, ()> {
+        if args.is_empty() {
+            return Err(());
+        }
+        let mut result = args.pop().unwrap();
+        loop {
+            match args.pop() {
+                None => {
+                    return Ok(result);
+                }
+                Some(arg) => {
+                    result = Type::Constructed(N::arrow(), vec![arg, result]);
+                }
+            }
+        }
+    }
     /// If the type is an arrow, get its associated argument and return types.
     ///
     /// # Examples
@@ -851,7 +885,7 @@ impl<N: Name> fmt::Display for UnificationError<N> {
 /// Contexts track substitutions and generate fresh type variables.
 ///
 /// [`Type`]: enum.Type.html
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
     substitution: HashMap<Variable, Type<N>>,
     next: Variable,
@@ -868,6 +902,12 @@ impl<N: Name> Context<N> {
     /// The substitution managed by the context.
     pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
+    }
+    /// Reset the substitution to the empty substitution while leaving its ability to generate fresh [`Variable`]s intact.
+    ///
+    /// [`Variable`]: type.Variable.html
+    pub fn reset(&mut self) {
+        self.substitution = HashMap::new();
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
