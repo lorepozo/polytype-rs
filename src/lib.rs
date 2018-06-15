@@ -844,6 +844,11 @@ impl<N: Name> fmt::Display for UnificationError<N> {
         }
     }
 }
+impl<N: Name + fmt::Debug> std::error::Error for UnificationError<N> {
+    fn description(&self) -> &'static str {
+        "unification failed"
+    }
+}
 
 /// A type environment. Useful for reasoning about [`Type`]s (e.g unification,
 /// type inference).
