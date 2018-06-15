@@ -392,8 +392,9 @@ impl<N: Name> fmt::Display for TypeSchema<N> {
 
 /// Represents [monotypes][1] (fully instantiated, unquantified types).
 ///
-/// The primary ways of creating a `Type` are with the [`tp!`] macro,
-/// [`TypeSchema::instantiate`]. [`Type::from`] and [`Type::arrow`] can also be used to construct function types (i.e. `α → β`).
+/// The primary ways to create a `Type` are with either the [`tp!`] macro or
+/// [`TypeSchema::instantiate`]. [`Type::from`] and [`Type::arrow`] can also be
+/// used to construct function types (i.e. `α → β`).
 ///
 /// [`tp!`]: macro.tp.html
 /// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
@@ -457,13 +458,7 @@ pub enum Type<N: Name = &'static str> {
     /// # #[macro_use] extern crate polytype;
     /// # use polytype::Type;
     /// # fn main() {
-    /// use std::collections::VecDeque;
-    ///
     /// let v = vec![tp!(int), tp!(int), tp!(bool)];
-    /// let t = Type::from(v);
-    /// assert_eq!(t.to_string(), "int → int → bool");
-    ///
-    /// let v = VecDeque::from(vec![tp!(int), tp!(int), tp!(bool)]);
     /// let t = Type::from(v);
     /// assert_eq!(t.to_string(), "int → int → bool");
     /// # }
