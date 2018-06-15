@@ -392,8 +392,8 @@ impl<N: Name> fmt::Display for TypeSchema<N> {
 
 /// Represents [monotypes][1] (fully instantiated, unquantified types).
 ///
-/// The primary ways of creating a `Type` are with the [`tp!`] macro or with
-/// [`TypeSchema::instantiate`].
+/// The primary ways of creating a `Type` are with the [`tp!`] macro,
+/// [`TypeSchema::instantiate`]. [`Type::from`] and [`Type::arrow`] can also be used to construct function types (i.e. `α → β`).
 ///
 /// [`tp!`]: macro.tp.html
 /// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
@@ -430,6 +430,49 @@ pub enum Type<N: Name = &'static str> {
     /// assert_eq!(t.to_string(), "list(int)");
     /// # }
     /// ```
+    ///
+    /// Function types, or arrows, are a special type of Composite, `α → β`,
+    /// representing functions from some input type, `α`, to some output type,
+    /// `β`. They are the only Composite type that [*must* exist][1] in a
+    /// Hindley-Milner type system. We provide two convenience functions for
+    /// constructing arrows: [`Type::arrow`], and two implementations of
+    /// `Type::from`, one for [`Vec<Type>`] and one for [`VecDeque<Type>`].
+    ///
+    /// [`Type::arrow`] is useful for combining an input and output `Type` into
+    /// a single arrow (i.e. `α → β`):
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let t = Type::arrow(tp!(int), tp!(bool));
+    /// assert_eq!(t.to_string(), "int → bool");
+    /// # }
+    /// ```
+    ///
+    /// `Type::from` is useful for combining many `Type`s into a curried
+    /// function. (i.e. `α0 → α1 → α2 → ... → αn`):
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// use std::collections::VecDeque;
+    ///
+    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
+    /// let t = Type::from(v);
+    /// assert_eq!(t.to_string(), "int → int → bool");
+    ///
+    /// let v = VecDeque::from(vec![tp!(int), tp!(int), tp!(bool)]);
+    /// let t = Type::from(v);
+    /// assert_eq!(t.to_string(), "int → int → bool");
+    /// # }
+    /// ```
+    ///
+    /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
+    /// [`Type::arrow`]: enum.Type.html#method.arrow
+    /// [`Vec<Type>`]: enum.Type.html#impl-From<Vec<Type<N>>>
+    /// [`VecDeque<Type>`]: enum.Type.html#impl-From<VecDeque<Type<N>>>
     Constructed(N, Vec<Type<N>>),
     /// Type variables (e.g. `α`, `β`) identified by de Bruin indices.
     ///
@@ -476,40 +519,6 @@ impl<N: Name> Type<N> {
     /// ```
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
-    }
-    /// Construct a function type from each item in `args` (i.e. args[0] → args[1] → args[2] → ... → args[n]).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::Type;
-    /// # fn main() {
-    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
-    /// let t = Type::multi_arrow(v);
-    /// assert_eq!(t, Ok(Type::arrow(tp!(int), Type::arrow(tp!(int), tp!(bool)))));
-    /// assert_eq!(t.unwrap().to_string(), "int → int → bool");
-    ///
-    /// let v: Vec<Type<&'static str>> = vec![];
-    /// let t = Type::multi_arrow(v);
-    /// assert_eq!(t, Err(()));
-    /// # }
-    /// ```
-    pub fn multi_arrow(mut args: Vec<Type<N>>) -> Result<Type<N>, ()> {
-        if args.is_empty() {
-            return Err(());
-        }
-        let mut result = args.pop().unwrap();
-        loop {
-            match args.pop() {
-                None => {
-                    return Ok(result);
-                }
-                Some(arg) => {
-                    result = Type::Constructed(N::arrow(), vec![arg, result]);
-                }
-            }
-        }
     }
     /// If the type is an arrow, get its associated argument and return types.
     ///
