@@ -392,8 +392,9 @@ impl<N: Name> fmt::Display for TypeSchema<N> {
 
 /// Represents [monotypes][1] (fully instantiated, unquantified types).
 ///
-/// The primary ways of creating a `Type` are with the [`tp!`] macro or with
-/// [`TypeSchema::instantiate`].
+/// The primary ways to create a `Type` are with either the [`tp!`] macro or
+/// [`TypeSchema::instantiate`]. [`Type::from`] and [`Type::arrow`] can also be
+/// used to construct function types (i.e. `α → β`).
 ///
 /// [`tp!`]: macro.tp.html
 /// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
@@ -430,6 +431,43 @@ pub enum Type<N: Name = &'static str> {
     /// assert_eq!(t.to_string(), "list(int)");
     /// # }
     /// ```
+    ///
+    /// Function types, or arrows, are a special type of Composite, `α → β`,
+    /// representing functions from some input type, `α`, to some output type,
+    /// `β`. They are the only Composite type that [*must* exist][1] in a
+    /// Hindley-Milner type system. We provide two convenience functions for
+    /// constructing arrows: [`Type::arrow`], and two implementations of
+    /// `Type::from`, one for [`Vec<Type>`] and one for [`VecDeque<Type>`].
+    ///
+    /// [`Type::arrow`] is useful for combining an input and output `Type` into
+    /// a single arrow (i.e. `α → β`):
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let t = Type::arrow(tp!(int), tp!(bool));
+    /// assert_eq!(t.to_string(), "int → bool");
+    /// # }
+    /// ```
+    ///
+    /// `Type::from` is useful for combining many `Type`s into a curried
+    /// function. (i.e. `α0 → α1 → α2 → ... → αn`):
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::Type;
+    /// # fn main() {
+    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
+    /// let t = Type::from(v);
+    /// assert_eq!(t.to_string(), "int → int → bool");
+    /// # }
+    /// ```
+    ///
+    /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
+    /// [`Type::arrow`]: enum.Type.html#method.arrow
+    /// [`Vec<Type>`]: enum.Type.html#impl-From<Vec<Type<N>>>
+    /// [`VecDeque<Type>`]: enum.Type.html#impl-From<VecDeque<Type<N>>>
     Constructed(N, Vec<Type<N>>),
     /// Type variables (e.g. `α`, `β`) identified by de Bruin indices.
     ///
@@ -856,7 +894,7 @@ impl<N: Name + fmt::Debug> std::error::Error for UnificationError<N> {
 /// Contexts track substitutions and generate fresh type variables.
 ///
 /// [`Type`]: enum.Type.html
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
     substitution: HashMap<Variable, Type<N>>,
     next: Variable,
@@ -873,6 +911,12 @@ impl<N: Name> Context<N> {
     /// The substitution managed by the context.
     pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
+    }
+    /// Reset the substitution to the empty substitution while leaving its ability to generate fresh [`Variable`]s intact.
+    ///
+    /// [`Variable`]: type.Variable.html
+    pub fn reset(&mut self) {
+        self.substitution = HashMap::new();
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
