@@ -1091,7 +1091,7 @@ impl<N: Name> Context<N> {
         }
     }
     /// Merge two type contexts. Every `Type` that corresponds to the `other` context must be
-    /// reified using [`ContextChange::reify`].
+    /// reified using [`ContextChange::reify_type`].
     ///
     /// # Examples
     ///
@@ -1114,7 +1114,7 @@ impl<N: Name> Context<N> {
     ///
     /// let ctx_change = ctx.merge(ctx2);
     /// // rewrite all terms under ctx2 using ctx_change
-    /// ctx_change.reify(&mut t);
+    /// ctx_change.reify_type(&mut t);
     /// assert_eq!(t.to_string(), "t2 → t3");
     /// assert_eq!(t.apply(&ctx).to_string(), "bool → t3");
     ///
@@ -1122,7 +1122,7 @@ impl<N: Name> Context<N> {
     /// # }
     /// ```
     ///
-    /// [`ContextChange::reify`]: struct.ContextChange.html#method.reify
+    /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
     pub fn merge(&mut self, other: Context<N>) -> ContextChange {
         let delta = self.next;
         for (v, tp) in other.substitution {
@@ -1140,12 +1140,29 @@ pub struct ContextChange {
     delta: u16,
 }
 impl ContextChange {
-    pub fn reify(&self, tp: &mut Type) {
+    /// Reify a [`Type`] for use under a merged [`Context`].
+    ///
+    /// [`Type`]: enum.Type.html
+    /// [`Context`]: struct.Context.html
+    pub fn reify_type(&self, tp: &mut Type) {
         match tp {
             Type::Constructed(_, args) => for arg in args {
-                self.reify(arg)
+                self.reify_type(arg)
             },
             Type::Variable(n) => *n += self.delta,
+        }
+    }
+    /// Reify a [`TypeSchema`] for use under a merged [`Context`].
+    ///
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`Context`]: struct.Context.html
+    pub fn reify_typeschema(&self, tpsc: &mut TypeSchema) {
+        match tpsc {
+            TypeSchema::Monotype(tp) => self.reify_type(tp),
+            TypeSchema::Polytype { variable, body } => {
+                *variable += self.delta;
+                self.reify_typeschema(body);
+            }
         }
     }
 }
