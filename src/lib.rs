@@ -857,8 +857,13 @@ impl<N: Name> From<VecDeque<Type<N>>> for Type<N> {
     }
 }
 impl<N: Name> From<Vec<Type<N>>> for Type<N> {
-    fn from(tps: Vec<Type<N>>) -> Type<N> {
-        Type::from(VecDeque::from(tps))
+    fn from(mut tps: Vec<Type<N>>) -> Type<N> {
+        let mut beta = tps.pop()
+            .unwrap_or_else(|| panic!("cannot create a type from nothing"));
+        while let Some(alpha) = tps.pop() {
+            beta = Type::arrow(alpha, beta)
+        }
+        beta
     }
 }
 
