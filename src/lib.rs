@@ -393,11 +393,12 @@ impl<N: Name> fmt::Display for TypeSchema<N> {
 /// Represents [monotypes][1] (fully instantiated, unquantified types).
 ///
 /// The primary ways to create a `Type` are with either the [`tp!`] macro or
-/// [`TypeSchema::instantiate`]. [`Type::from`] and [`Type::arrow`] can also be
-/// used to construct function types (i.e. `α → β`).
+/// [`TypeSchema::instantiate`]. [`Type::arrow`] constructs function types (i.e.  `α → β`), as does
+/// conversion (`Type::from`) with `Vec` and `VecDeque` for curried arrows.
 ///
 /// [`tp!`]: macro.tp.html
 /// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
+/// [`Type::arrow`]: enum.TypeSchema.html#method.instantiate
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type<N: Name = &'static str> {
@@ -422,7 +423,7 @@ pub enum Type<N: Name = &'static str> {
     /// assert_eq!(tlist_of_ints.to_string(), "list(int)");
     /// ```
     ///
-    /// With the macros:
+    /// With the macro:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
@@ -432,15 +433,9 @@ pub enum Type<N: Name = &'static str> {
     /// # }
     /// ```
     ///
-    /// Function types, or arrows, are a special type of Composite, `α → β`,
-    /// representing functions from some input type, `α`, to some output type,
-    /// `β`. They are the only Composite type that [*must* exist][1] in a
-    /// Hindley-Milner type system. We provide two convenience functions for
-    /// constructing arrows: [`Type::arrow`], and two implementations of
-    /// `Type::from`, one for [`Vec<Type>`] and one for [`VecDeque<Type>`].
-    ///
-    /// [`Type::arrow`] is useful for combining an input and output `Type` into
-    /// a single arrow (i.e. `α → β`):
+    /// Function types, or "arrows", are constructed with either [`Type::arrow`], two
+    /// implementations of `Type::from` — one for [`Vec<Type>`] and one for [`VecDeque<Type>`] — or
+    /// the macro:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
@@ -448,28 +443,20 @@ pub enum Type<N: Name = &'static str> {
     /// # fn main() {
     /// let t = Type::arrow(tp!(int), tp!(bool));
     /// assert_eq!(t.to_string(), "int → bool");
-    /// # }
-    /// ```
     ///
-    /// `Type::from` is useful for combining many `Type`s into a curried
-    /// function. (i.e. `α0 → α1 → α2 → ... → αn`):
+    /// let t = Type::from(vec![tp!(int), tp!(int), tp!(bool)]);
+    /// assert_eq!(t.to_string(), "int → int → bool");
     ///
-    /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::Type;
-    /// # fn main() {
-    /// let v = vec![tp!(int), tp!(int), tp!(bool)];
-    /// let t = Type::from(v);
+    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]); // prefer this over Type::from
     /// assert_eq!(t.to_string(), "int → int → bool");
     /// # }
     /// ```
     ///
-    /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
     /// [`Type::arrow`]: enum.Type.html#method.arrow
     /// [`Vec<Type>`]: enum.Type.html#impl-From<Vec<Type<N>>>
     /// [`VecDeque<Type>`]: enum.Type.html#impl-From<VecDeque<Type<N>>>
     Constructed(N, Vec<Type<N>>),
-    /// Type variables (e.g. `α`, `β`) identified by de Bruin indices.
+    /// Type variables (e.g. `α`, `β`).
     ///
     /// # Examples
     ///
@@ -483,7 +470,7 @@ pub enum Type<N: Name = &'static str> {
     /// # }
     /// ```
     ///
-    /// With the macros:
+    /// With the macro:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
