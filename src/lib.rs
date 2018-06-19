@@ -648,7 +648,8 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.apply(ctx)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => ctx.substitution
+            Type::Variable(v) => ctx
+                .substitution
                 .get(&v)
                 .cloned()
                 .unwrap_or_else(|| Type::Variable(v)),
@@ -663,7 +664,8 @@ impl<N: Name> Type<N> {
                 t.apply_mut(ctx)
             },
             Type::Variable(v) => {
-                *self = ctx.substitution
+                *self = ctx
+                    .substitution
                     .get(&v)
                     .cloned()
                     .unwrap_or_else(|| Type::Variable(v));
@@ -696,7 +698,8 @@ impl<N: Name> Type<N> {
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn generalize(&self, bound: &[Variable]) -> TypeSchema<N> {
-        let fvs = self.vars()
+        let fvs = self
+            .vars()
             .into_iter()
             .filter(|x| !bound.contains(x))
             .collect::<Vec<Variable>>();
@@ -845,7 +848,8 @@ impl<N: Name> From<VecDeque<Type<N>>> for Type<N> {
 }
 impl<N: Name> From<Vec<Type<N>>> for Type<N> {
     fn from(mut tps: Vec<Type<N>>) -> Type<N> {
-        let mut beta = tps.pop()
+        let mut beta = tps
+            .pop()
             .unwrap_or_else(|| panic!("cannot create a type from nothing"));
         while let Some(alpha) = tps.pop() {
             beta = Type::arrow(alpha, beta)
@@ -1082,8 +1086,12 @@ impl<N: Name> Context<N> {
             }
         }
     }
-    /// Merge two type contexts. Every `Type` that corresponds to the `other` context must be
-    /// reified using [`ContextChange::reify_type`].
+    /// Merge two type contexts.
+    ///
+    /// Every [`Type`] ([`TypeSchema`]) that corresponds to the `other` context
+    /// must be reified using [`ContextChange::reify_type`]
+    /// ([`ContextChange::reify_typeschema`]). Any [`Variable`] in `sacreds`
+    /// will not be changed by the context (i.e. reification will ignore it).
     ///
     /// # Examples
     ///
@@ -1104,7 +1112,7 @@ impl<N: Name> Context<N> {
     /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
     /// // ctx2 uses t0 and t1
     ///
-    /// let ctx_change = ctx.merge(ctx2);
+    /// let ctx_change = ctx.merge(ctx2, vec![]);
     /// // rewrite all terms under ctx2 using ctx_change
     /// ctx_change.reify_type(&mut t);
     /// assert_eq!(t.to_string(), "t2 → t3");
@@ -1115,13 +1123,17 @@ impl<N: Name> Context<N> {
     /// ```
     ///
     /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
-    pub fn merge(&mut self, other: Context<N>) -> ContextChange {
+    /// [`ContextChange::reify_typeschema`]: struct.ContextChange.html#method.reify_typeschema
+    /// [`Type`]: enum.Type.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`Variable`]: type.TypeSchema.html
+    pub fn merge(&mut self, other: Context<N>, sacreds: Vec<Variable>) -> ContextChange {
         let delta = self.next;
         for (v, tp) in other.substitution {
             self.substitution.insert(delta + v, tp);
         }
         self.next += other.next;
-        ContextChange { delta }
+        ContextChange { delta, sacreds }
     }
 }
 
@@ -1130,6 +1142,7 @@ impl<N: Name> Context<N> {
 /// [`Context::merge`]: struct.Context.html#method.merge
 pub struct ContextChange {
     delta: u16,
+    sacreds: Vec<Variable>,
 }
 impl ContextChange {
     /// Reify a [`Type`] for use under a merged [`Context`].
@@ -1141,6 +1154,7 @@ impl ContextChange {
             Type::Constructed(_, args) => for arg in args {
                 self.reify_type(arg)
             },
+            Type::Variable(n) if self.sacreds.contains(n) => (),
             Type::Variable(n) => *n += self.delta,
         }
     }
@@ -1152,7 +1166,9 @@ impl ContextChange {
         match tpsc {
             TypeSchema::Monotype(tp) => self.reify_type(tp),
             TypeSchema::Polytype { variable, body } => {
-                *variable += self.delta;
+                if !self.sacreds.contains(variable) {
+                    *variable += self.delta;
+                }
                 self.reify_typeschema(body);
             }
         }
