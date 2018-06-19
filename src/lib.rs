@@ -1095,6 +1095,8 @@ impl<N: Name> Context<N> {
     ///
     /// # Examples
     ///
+    /// without sacred variables
+    ///
     /// ```
     /// # #[macro_use] extern crate polytype;
     /// # use polytype::{Type, Context};
@@ -1122,6 +1124,36 @@ impl<N: Name> Context<N> {
     /// # }
     /// ```
     ///
+    /// with sacred variables
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::{Type, Context};
+    /// # fn main() {
+    /// let mut ctx = Context::default();
+    /// let a = ctx.new_variable();
+    /// let b = ctx.new_variable();
+    /// ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)])).unwrap();
+    /// // ctx uses t0 and t1
+    ///
+    /// let mut ctx2 = Context::default();
+    /// let a = ctx2.new_variable();
+    /// let b = ctx2.new_variable();
+    /// let mut t = Type::arrow(a, b);
+    /// ctx2.extend(0, tp!(bool));
+    /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
+    /// // ctx2 uses t0 and t1
+    ///
+    /// let ctx_change = ctx.merge(ctx2, vec![1]);
+    /// // rewrite all terms under ctx2 using ctx_change
+    /// ctx_change.reify_type(&mut t);
+    /// // t1 from ctx2 is preserved *and* constrained by ctx
+    /// assert_eq!(t.to_string(), "t2 → t1");
+    /// assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
+    ///
+    /// assert_eq!(ctx.new_variable(), tp!(4));
+    /// # }
+    /// ```
     /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
     /// [`ContextChange::reify_typeschema`]: struct.ContextChange.html#method.reify_typeschema
     /// [`Type`]: enum.Type.html
@@ -1166,9 +1198,7 @@ impl ContextChange {
         match tpsc {
             TypeSchema::Monotype(tp) => self.reify_type(tp),
             TypeSchema::Polytype { variable, body } => {
-                if !self.sacreds.contains(variable) {
-                    *variable += self.delta;
-                }
+                *variable += self.delta;
                 self.reify_typeschema(body);
             }
         }
