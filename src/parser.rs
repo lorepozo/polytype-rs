@@ -39,8 +39,7 @@ impl<N: Name> Parser<N> {
         constructed_simple<Parser<N>, CompleteStr, Type<N>>,
         self,
         do_parse!(
-            name_raw: alpha
-                >> name: expr_res!(N::parse(&name_raw))
+            name_raw: alpha >> name: expr_res!(N::parse(&name_raw))
                 >> (Type::Constructed(name, vec![]))
         )
     );
