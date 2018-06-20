@@ -35,7 +35,7 @@
 //! let t = t.instantiate(&mut ctx);
 //! assert_eq!(t.to_string(), "(t0 → bool) → list(t0) → list(t0)");
 //!
-//! // We can register a substiution for t0 in the context:
+//! // We can register a substitution for t0 in the context:
 //! ctx.extend(0, tp!(int));
 //! let t = t.apply(&ctx);
 //! assert_eq!(t.to_string(), "(int → bool) → list(int) → list(int)");
