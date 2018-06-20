@@ -1082,10 +1082,16 @@ impl<N: Name> Context<N> {
             }
         }
     }
-    /// Merge two type contexts. Every `Type` that corresponds to the `other` context must be
-    /// reified using [`ContextChange::reify_type`].
+    /// Merge two type contexts.
+    ///
+    /// Every [`Type`] ([`TypeSchema`]) that corresponds to the `other` context
+    /// must be reified using [`ContextChange::reify_type`]
+    /// ([`ContextChange::reify_typeschema`]). Any [`Variable`] in `sacreds`
+    /// will not be changed by the context (i.e. reification will ignore it).
     ///
     /// # Examples
+    ///
+    /// without sacred variables
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
@@ -1104,7 +1110,7 @@ impl<N: Name> Context<N> {
     /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
     /// // ctx2 uses t0 and t1
     ///
-    /// let ctx_change = ctx.merge(ctx2);
+    /// let ctx_change = ctx.merge(ctx2, vec![]);
     /// // rewrite all terms under ctx2 using ctx_change
     /// ctx_change.reify_type(&mut t);
     /// assert_eq!(t.to_string(), "t2 → t3");
@@ -1114,14 +1120,48 @@ impl<N: Name> Context<N> {
     /// # }
     /// ```
     ///
+    /// with sacred variables
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # use polytype::{Type, Context};
+    /// # fn main() {
+    /// let mut ctx = Context::default();
+    /// let a = ctx.new_variable();
+    /// let b = ctx.new_variable();
+    /// ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)])).unwrap();
+    /// // ctx uses t0 and t1
+    ///
+    /// let mut ctx2 = Context::default();
+    /// let a = ctx2.new_variable();
+    /// let b = ctx2.new_variable();
+    /// let mut t = Type::arrow(a, b);
+    /// ctx2.extend(0, tp!(bool));
+    /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
+    /// // ctx2 uses t0 and t1
+    ///
+    /// let ctx_change = ctx.merge(ctx2, vec![1]);
+    /// // rewrite all terms under ctx2 using ctx_change
+    /// ctx_change.reify_type(&mut t);
+    /// // t1 from ctx2 is preserved *and* constrained by ctx
+    /// assert_eq!(t.to_string(), "t2 → t1");
+    /// assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
+    ///
+    /// assert_eq!(ctx.new_variable(), tp!(4));
+    /// # }
+    /// ```
     /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
-    pub fn merge(&mut self, other: Context<N>) -> ContextChange {
+    /// [`ContextChange::reify_typeschema`]: struct.ContextChange.html#method.reify_typeschema
+    /// [`Type`]: enum.Type.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`Variable`]: type.TypeSchema.html
+    pub fn merge(&mut self, other: Context<N>, sacreds: Vec<Variable>) -> ContextChange {
         let delta = self.next;
         for (v, tp) in other.substitution {
             self.substitution.insert(delta + v, tp);
         }
         self.next += other.next;
-        ContextChange { delta }
+        ContextChange { delta, sacreds }
     }
 }
 
@@ -1130,6 +1170,7 @@ impl<N: Name> Context<N> {
 /// [`Context::merge`]: struct.Context.html#method.merge
 pub struct ContextChange {
     delta: u16,
+    sacreds: Vec<Variable>,
 }
 impl ContextChange {
     /// Reify a [`Type`] for use under a merged [`Context`].
@@ -1141,6 +1182,7 @@ impl ContextChange {
             Type::Constructed(_, args) => for arg in args {
                 self.reify_type(arg)
             },
+            Type::Variable(n) if self.sacreds.contains(n) => (),
             Type::Variable(n) => *n += self.delta,
         }
     }
