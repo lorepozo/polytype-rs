@@ -904,12 +904,6 @@ impl<N: Name> Context<N> {
     pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
     }
-    /// Reset the substitution to the empty substitution while leaving its ability to generate fresh [`Variable`]s intact.
-    ///
-    /// [`Variable`]: type.Variable.html
-    pub fn reset(&mut self) {
-        self.substitution = HashMap::new();
-    }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
     ///
@@ -1081,6 +1075,41 @@ impl<N: Name> Context<N> {
                 }
             }
         }
+    }
+    /// Confines the substitution to those which act on the given variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[macro_use] extern crate polytype;
+    /// # fn main() {
+    /// # use polytype::Context;
+    /// let mut ctx = Context::default();
+    /// let v0 = ctx.new_variable();
+    /// let v1 = ctx.new_variable();
+    /// ctx.unify(&v0, &tp!(int));
+    /// ctx.unify(&v1, &tp!(bool));
+    ///
+    /// {
+    ///     let sub = ctx.substitution();
+    ///     assert_eq!(sub.len(), 2);
+    ///     assert_eq!(sub[&0], tp!(int));
+    ///     assert_eq!(sub[&1], tp!(bool));
+    /// }
+    ///
+    /// // confine the substitution to v1
+    /// ctx.confine(&[1]);
+    /// let sub = ctx.substitution();
+    /// assert_eq!(sub.len(), 1);
+    /// assert_eq!(sub[&1], tp!(bool));
+    /// # }
+    /// ```
+    pub fn confine(&mut self, keep: &[Variable]) {
+        let mut substitution = HashMap::new();
+        for v in keep {
+            substitution.insert(*v, self.substitution[v].clone());
+        }
+        self.substitution = substitution;
     }
     /// Merge two type contexts.
     ///
