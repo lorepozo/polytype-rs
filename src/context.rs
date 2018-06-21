@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::error;
 use std::fmt;
 
-use std::error;
 use {Name, Type, TypeSchema, Variable};
 
 /// Errors during unification.
@@ -270,7 +270,8 @@ impl<N: Name> Context<N> {
     ///
     /// # Examples
     ///
-    /// without sacred variables
+    /// Without sacred variables, which assumes that all type variables between the contexts are
+    /// distinct:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
@@ -299,7 +300,8 @@ impl<N: Name> Context<N> {
     /// # }
     /// ```
     ///
-    /// with sacred variables
+    /// With sacred variables, which specifies which type variables are equivalent in both
+    /// contexts:
     ///
     /// ```
     /// # #[macro_use] extern crate polytype;
@@ -319,10 +321,10 @@ impl<N: Name> Context<N> {
     /// assert_eq!(t.apply(&ctx2).to_string(), "bool → t1");
     /// // ctx2 uses t0 and t1
     ///
+    /// // t1 from ctx2 is preserved *and* constrained by ctx
     /// let ctx_change = ctx.merge(ctx2, vec![1]);
     /// // rewrite all terms under ctx2 using ctx_change
     /// ctx_change.reify_type(&mut t);
-    /// // t1 from ctx2 is preserved *and* constrained by ctx
     /// assert_eq!(t.to_string(), "t2 → t1");
     /// assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
     ///
@@ -339,6 +341,7 @@ impl<N: Name> Context<N> {
         for (v, tp) in other.substitution {
             self.substitution.insert(delta + v, tp);
         }
+        // this is intentionally wasting variable space when there are sacreds:
         self.next += other.next;
         ContextChange { delta, sacreds }
     }

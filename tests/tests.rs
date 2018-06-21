@@ -1,7 +1,8 @@
 extern crate polytype;
 
-use polytype::*;
 use std::collections::VecDeque;
+
+use polytype::*;
 
 #[test]
 fn test_tp_macro() {
@@ -273,6 +274,58 @@ fn test_unify_nonstring_name() {
         ),
         &t,
     ).expect_err("nonstring incompatible types");
+}
+
+#[test]
+fn test_merge_no_sacreds() {
+    let mut ctx = Context::default();
+    let a = ctx.new_variable();
+    let b = ctx.new_variable();
+    let _ = ctx.new_variable();
+    ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)]))
+        .unwrap();
+
+    let mut ctx2 = Context::default();
+    let _ = ctx2.new_variable();
+    let pt = ptp!(0, 1; @arrow[tp!(0), tp!(1)]);
+    let mut t = pt.instantiate(&mut ctx2);
+    ctx2.extend(1, tp!(bool));
+    let mut last = ctx2.new_variable();
+    assert_eq!(t.apply(&ctx2).to_string(), "bool → t2");
+
+    let ctx_change = ctx.merge(ctx2, vec![]);
+    ctx_change.reify_type(&mut t);
+    assert_eq!(t.to_string(), "t4 → t5");
+    assert_eq!(t.apply(&ctx).to_string(), "bool → t5");
+    ctx_change.reify_type(&mut last);
+    assert_eq!(last, tp!(6));
+    assert_eq!(ctx.new_variable(), tp!(7));
+}
+
+#[test]
+fn test_merge_with_sacreds() {
+    let mut ctx = Context::default();
+    let a = ctx.new_variable();
+    let b = ctx.new_variable();
+    let _ = ctx.new_variable();
+    ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)]))
+        .unwrap();
+
+    let mut ctx2 = Context::default();
+    let _ = ctx2.new_variable();
+    let pt = ptp!(0, 1; @arrow[tp!(0), tp!(1)]);
+    let mut t = pt.instantiate(&mut ctx2);
+    ctx2.extend(2, tp!(bool));
+    let mut last = ctx2.new_variable();
+    assert_eq!(t.apply(&ctx2).to_string(), "t1 → bool");
+
+    let ctx_change = ctx.merge(ctx2, vec![0, 1]);
+    ctx_change.reify_type(&mut t);
+    assert_eq!(t.to_string(), "t1 → t5");
+    assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
+    ctx_change.reify_type(&mut last);
+    assert_eq!(last, tp!(6));
+    assert_eq!(ctx.new_variable(), tp!(7));
 }
 
 #[test]
