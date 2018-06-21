@@ -13,6 +13,10 @@ matrix:
   allow_failures:
     - env: KCOV=1
   include:
+    - rust: nightly
+      env: BENCH=1
+      script:
+        - cargo bench --verbose
     - rust: nightly-2018-05-04
       env:
         - CLIPPY_VERSION=0.0.196
