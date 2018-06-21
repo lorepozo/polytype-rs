@@ -11,16 +11,16 @@ Implements type inference via unification.
 
 ```toml
 [dependencies]
-polytype = "5.0"
+polytype = "6.0"
 ```
 
 **`polytype`** provides the
-[`TypeSchema`](https://docs.rs/polytype/~5/polytype/enum.TypeSchema.html) and
-[`Type`](https://docs.rs/polytype/~5/polytype/enum.Type.html) enums, the
-[`Context`](https://docs.rs/polytype/~5/polytype/struct.Context.html)
+[`TypeSchema`](https://docs.rs/polytype/~6/polytype/enum.TypeSchema.html) and
+[`Type`](https://docs.rs/polytype/~6/polytype/enum.Type.html) enums, the
+[`Context`](https://docs.rs/polytype/~6/polytype/struct.Context.html)
 struct, and the
-[`tp!`](https://docs.rs/polytype/~5/polytype/macro.tp.html) and
-[`ptp!`](https://docs.rs/polytype/~5/polytype/macro.ptp.html) macros which
+[`tp!`](https://docs.rs/polytype/~6/polytype/macro.tp.html) and
+[`ptp!`](https://docs.rs/polytype/~6/polytype/macro.ptp.html) macros which
 help to concisely create types and type schemas.
 
 Unification:
