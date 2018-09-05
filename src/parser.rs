@@ -39,7 +39,8 @@ impl<N: Name> Parser<N> {
         constructed_simple<Parser<N>, CompleteStr, Type<N>>,
         self,
         do_parse!(
-            name_raw: alpha >> name: expr_res!(N::parse(&name_raw))
+            name_raw: alpha
+                >> name: expr_res!(N::parse(&name_raw))
                 >> (Type::Constructed(name, vec![]))
         )
     );
@@ -85,7 +86,7 @@ impl<N: Name> Parser<N> {
                     call_m!(self.constructed_simple))
         );
     method!(polytype<Parser<N>, CompleteStr, TypeSchema<N>>, mut self,
-               alt!(map!(call_m!(self.monotype), TypeSchema::Monotype) |
-                    call_m!(self.binding))
+            alt!(call_m!(self.binding) |
+                 map!(call_m!(self.monotype), TypeSchema::Monotype))
         );
 }
