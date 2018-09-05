@@ -18,12 +18,11 @@ matrix:
       before_script:
         - rustup component add rustfmt-preview
       script:
-        - cargo fmt --all -- --write-mode=diff
+        - cargo fmt --all -- --check
     - rust: nightly
       env: CLIPPY=1
-      # using bleeding-edge nightly + clippy so it stays recent and rarely fails
       before_script:
-        - cargo install clippy --git https://github.com/rust-lang-nursery/rust-clippy || echo "clippy already installed"
+        - rustup component add clippy-preview
       script:
         - cargo clippy
     - rust: nightly
