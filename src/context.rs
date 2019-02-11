@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-use std::error;
-use std::fmt;
+use std::{collections::HashMap, error, fmt};
 
-use {Name, Type, TypeSchema, Variable};
+use crate::{Name, Type, TypeSchema, Variable};
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
@@ -15,7 +13,7 @@ pub enum UnificationError<N: Name = &'static str> {
     Failure(Type<N>, Type<N>),
 }
 impl<N: Name> fmt::Display for UnificationError<N> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             UnificationError::Occurs(v) => write!(f, "Occurs({})", v),
             UnificationError::Failure(ref t1, ref t2) => {
@@ -70,9 +68,7 @@ impl<N: Name> Context<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::{Type, Context};
+    /// # use polytype::{Type, Context, ptp, tp};
     /// let mut ctx = Context::default();
     ///
     /// // Get a fresh variable
@@ -87,7 +83,6 @@ impl<N: Name> Context<N> {
     /// // Get another fresh variable
     /// let t3 = ctx.new_variable();
     /// assert_eq!(t3, Type::Variable(3));
-    /// # }
     /// ```
     ///
     /// [`Type::Variable`]: enum.Type.html#variant.Variable
@@ -101,9 +96,7 @@ impl<N: Name> Context<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Context;
+    /// # use polytype::{Context, tp};
     /// let mut ctx = Context::default();
     ///
     /// let t1 = tp!(@arrow[tp!(int), tp!(0)]);
@@ -113,16 +106,13 @@ impl<N: Name> Context<N> {
     /// let t1 = t1.apply(&ctx);
     /// let t2 = t2.apply(&ctx);
     /// assert_eq!(t1, t2);  // int → bool
-    /// # }
     /// ```
     ///
     /// Unification errors leave the context unaffected. A
     /// [`UnificationError::Failure`] error happens when symbols don't match:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::{Context, UnificationError};
+    /// # use polytype::{Context, UnificationError, tp};
     /// let mut ctx = Context::default();
     ///
     /// let t1 = tp!(@arrow[tp!(int), tp!(0)]);
@@ -134,7 +124,6 @@ impl<N: Name> Context<N> {
     ///     assert_eq!(left, tp!(int));
     ///     assert_eq!(right, tp!(bool));
     /// } else { unreachable!() }
-    /// # }
     /// ```
     ///
     /// An [`UnificationError::Occurs`] error happens when the same type
@@ -143,9 +132,7 @@ impl<N: Name> Context<N> {
     /// unless you mean them to.
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::{Context, UnificationError};
+    /// # use polytype::{Context, UnificationError, tp};
     /// let mut ctx = Context::default();
     ///
     /// let t1 = tp!(1);
@@ -157,7 +144,6 @@ impl<N: Name> Context<N> {
     ///     // t1 would have to be bool -> bool -> ... ad infinitum.
     ///     assert_eq!(v, 1);
     /// } else { unreachable!() }
-    /// # }
     /// ```
     ///
     /// [`UnificationError::Failure`]: enum.UnificationError.html#variant.Failure
@@ -231,9 +217,7 @@ impl<N: Name> Context<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Context;
+    /// # use polytype::{Context, tp};
     /// let mut ctx = Context::default();
     /// let v0 = ctx.new_variable();
     /// let v1 = ctx.new_variable();
@@ -252,7 +236,6 @@ impl<N: Name> Context<N> {
     /// let sub = ctx.substitution();
     /// assert_eq!(sub.len(), 1);
     /// assert_eq!(sub[&1], tp!(bool));
-    /// # }
     /// ```
     pub fn confine(&mut self, keep: &[Variable]) {
         let mut substitution = HashMap::new();
@@ -274,9 +257,7 @@ impl<N: Name> Context<N> {
     /// distinct:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::{Type, Context};
-    /// # fn main() {
+    /// # use polytype::{Type, Context, ptp, tp};
     /// let mut ctx = Context::default();
     /// let a = ctx.new_variable();
     /// let b = ctx.new_variable();
@@ -297,16 +278,13 @@ impl<N: Name> Context<N> {
     /// assert_eq!(t.apply(&ctx).to_string(), "bool → t3");
     ///
     /// assert_eq!(ctx.new_variable(), tp!(4));
-    /// # }
     /// ```
     ///
     /// With sacred variables, which specifies which type variables are equivalent in both
     /// contexts:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::{Type, Context};
-    /// # fn main() {
+    /// # use polytype::{Type, Context, tp};
     /// let mut ctx = Context::default();
     /// let a = ctx.new_variable();
     /// let b = ctx.new_variable();
@@ -329,7 +307,6 @@ impl<N: Name> Context<N> {
     /// assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
     ///
     /// assert_eq!(ctx.new_variable(), tp!(4));
-    /// # }
     /// ```
     /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
     /// [`ContextChange::reify_typeschema`]: struct.ContextChange.html#method.reify_typeschema
@@ -361,9 +338,11 @@ impl ContextChange {
     /// [`Context`]: struct.Context.html
     pub fn reify_type(&self, tp: &mut Type) {
         match tp {
-            Type::Constructed(_, args) => for arg in args {
-                self.reify_type(arg)
-            },
+            Type::Constructed(_, args) => {
+                for arg in args {
+                    self.reify_type(arg)
+                }
+            }
             Type::Variable(n) if self.sacreds.contains(n) => (),
             Type::Variable(n) => *n += self.delta,
         }

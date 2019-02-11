@@ -1,10 +1,8 @@
 #![feature(test)]
 
-#[macro_use]
-extern crate polytype;
 extern crate test;
 
-use polytype::Context;
+use polytype::{ptp, tp, Context};
 use test::Bencher;
 
 #[bench]

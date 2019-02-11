@@ -16,10 +16,8 @@
 //! The basics:
 //!
 //! ```
-//! # #[macro_use] extern crate polytype;
-//! use polytype::Context;
+//! use polytype::{ptp, tp, Context};
 //!
-//! # fn main() {
 //! // filter: ∀α. (α → bool) → [α] → [α]
 //! let t = ptp!(0; @arrow[
 //!     tp!(@arrow[tp!(0), tp!(bool)]),
@@ -39,16 +37,13 @@
 //! ctx.extend(0, tp!(int));
 //! let t = t.apply(&ctx);
 //! assert_eq!(t.to_string(), "(int → bool) → list(int) → list(int)");
-//! # }
 //! ```
 //!
 //! Extended example:
 //!
 //! ```
-//! # #[macro_use] extern crate polytype;
-//! use polytype::Context;
+//! use polytype::{ptp, tp, Context};
 //!
-//! # fn main() {
 //! // reduce: ∀α. ∀β. (β → α → β) → β → [α] → β
 //! // We can represent the type schema of reduce using the included macros:
 //! let t = ptp!(0, 1; @arrow[
@@ -95,7 +90,6 @@
 //! // Finally, we can see what form reduce takes by applying the new substitution
 //! let t = t.apply(&ctx);
 //! assert_eq!(t.to_string(), "(int → int → int) → int → list(int) → int");
-//! # }
 //! ```
 //!
 //! [`Context`]: struct.Context.html
@@ -105,13 +99,8 @@
 //! [`TypeSchema`]: enum.TypeSchema.html
 //! [Hindley-Milner polymorphic typing system]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system
 
-extern crate itertools;
-#[macro_use]
-extern crate nom;
-
-#[macro_use]
-mod macros;
 mod context;
+mod macros;
 mod parser;
 mod types;
 
@@ -162,7 +151,7 @@ pub trait Name: Clone + Eq {
     /// with [`show`].
     ///
     /// [`show`]: #method.show
-    fn parse(&str) -> Result<Self, ()> {
+    fn parse(_s: &str) -> Result<Self, ()> {
         Err(())
     }
 

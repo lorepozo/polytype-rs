@@ -2,7 +2,6 @@ language: rust
 cache: cargo
 rust:
   - stable
-  - beta
   - nightly
 script:
   - cargo build --verbose
@@ -14,16 +13,11 @@ matrix:
     - env: KCOV=1
   include:
     - rust: stable
-      env: FMT=1
+      env: FMT=1 CLIPPY=1
       before_script:
-        - rustup component add rustfmt-preview
+        - rustup component add rustfmt clippy
       script:
         - cargo fmt --all -- --check
-    - rust: nightly
-      env: CLIPPY=1
-      before_script:
-        - rustup component add clippy-preview
-      script:
         - cargo clippy
     - rust: nightly
       env: BENCH=1

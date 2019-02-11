@@ -29,37 +29,29 @@
 /// Make a primitive type:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::Type;
-/// # fn main() {
+/// # use polytype::{tp, Type};
 /// let t = tp!(int);
 /// assert_eq!(format!("{}", t), "int");
 /// // Equivalent to:
 /// let t_eq = Type::Constructed("int", vec![]);
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// Make a variable type:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::Type;
-/// # fn main() {
+/// # use polytype::{tp, Type};
 /// let t = tp!(0);
 /// assert_eq!(format!("{}", t), "t0");
 /// // Equivalent to:
 /// let t_eq = Type::Variable(0);
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// Make a composite type:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::Type;
-/// # fn main() {
+/// # use polytype::{tp, Type};
 /// let tint = tp!(int);
 /// let tstr = tp!(str);
 /// let t = tp!(dict(tstr, tint));
@@ -70,15 +62,12 @@
 ///     Type::Constructed("int", vec![]),
 /// ]);
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// Make an arrow:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::Type;
-/// # fn main() {
+/// # use polytype::{tp, Type};
 /// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1), Type::Variable(2)]);
 /// assert_eq!(format!("{}", t), "t0 → t1 → t2");
 /// // Equivalent to:
@@ -90,15 +79,12 @@
 ///     )
 /// );
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// Nest them for more complex types:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::Type;
-/// # fn main() {
+/// # use polytype::{tp, Type};
 /// // mapi: (int → α → β) → [α] → [β]
 /// let t = tp!(@arrow[
 ///     tp!(@arrow[tp!(int), tp!(0), tp!(1)]),
@@ -106,7 +92,6 @@
 ///     tp!(list(tp!(1))),
 /// ]);
 /// assert_eq!(format!("{}", t), "(int → t0 → t1) → list(t0) → list(t1)");
-/// # }
 /// ```
 ///
 /// [`Type`]: enum.Type.html
@@ -116,15 +101,15 @@ macro_rules! tp {
     ($n:ident($($x:expr),*)) => {
         $crate::Type::Constructed(stringify!($n), vec![$($x),*])
     };
-    ($n:ident($($x:expr,)*)) => (tp!($n($($x),*)));
+    ($n:ident($($x:expr,)*)) => ($crate::tp!($n($($x),*)));
     ($n:expr) => ($crate::Type::Variable($n) as $crate::Type<&'static str>);
     (@arrow[$x:expr]) => ($x as $crate::Type<&'static str>);
     (@arrow[$x:expr, $($xs:expr),*]) => (
-        match ($x, tp!(@arrow[$($xs),+])) {
+        match ($x, $crate::tp!(@arrow[$($xs),+])) {
             (arg, ret) => $crate::Type::arrow(arg, ret)
         }
     );
-    (@arrow[$x:expr, $($xs:expr,)*]) => (tp!(@arrow[$x, $($xs),*]))
+    (@arrow[$x:expr, $($xs:expr,)*]) => ($crate::tp!(@arrow[$x, $($xs),*]))
 }
 
 /// Creates a [`TypeSchema`][] (convenience for common patterns).
@@ -154,9 +139,7 @@ macro_rules! tp {
 /// like wrapping [`tp!`] with a [`TypeSchema::Monotype`]:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::{Type, TypeSchema};
-/// # fn main() {
+/// # use polytype::{ptp, tp, Type, TypeSchema};
 /// let t = ptp!(dict(tp!(str), tp!(int)));
 /// assert_eq!(format!("{}", t), "dict(str,int)");
 /// // Equivalent to:
@@ -167,7 +150,6 @@ macro_rules! tp {
 ///     ])
 /// );
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// If you want to do quantification over a known monotype, precede the type
@@ -175,9 +157,7 @@ macro_rules! tp {
 /// subsequent monotype is treated like the [`tp!`] macro):
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::{Type, TypeSchema};
-/// # fn main() {
+/// # use polytype::{ptp, tp, Type, TypeSchema};
 /// let t = ptp!(0, 1; @arrow[tp!(0), tp!(1), tp!(0)]);
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
@@ -197,16 +177,13 @@ macro_rules! tp {
 ///     })
 /// };
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// If you want want do quantification over an existing [`TypeSchema`], use a
 /// comma after the quantified variables:
 ///
 /// ```
-/// # #[macro_use] extern crate polytype;
-/// # use polytype::{Type, TypeSchema};
-/// # fn main() {
+/// # use polytype::{ptp, tp, Type, TypeSchema};
 /// let inner = tp!(@arrow[tp!(0), tp!(1), tp!(0)]);
 /// let t = ptp!(0, 1, TypeSchema::Monotype(inner.clone()));
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
@@ -219,7 +196,6 @@ macro_rules! tp {
 ///     })
 /// };
 /// assert_eq!(t, t_eq);
-/// # }
 /// ```
 ///
 /// [`TypeSchema::Polytype`]: enum.TypeSchema.html#variant.Polytype
@@ -232,7 +208,7 @@ macro_rules! ptp {
     ($n:expr; $($t:tt)+) => {
         $crate::TypeSchema::Polytype {
             variable: $n,
-            body: Box::new($crate::TypeSchema::Monotype(tp!($($t)+))),
+            body: Box::new($crate::TypeSchema::Monotype($crate::tp!($($t)+))),
         }
     };
     ($n:expr, $body:expr) => {
@@ -244,10 +220,10 @@ macro_rules! ptp {
     ($n:expr, $($t:tt)+) => {
         $crate::TypeSchema::Polytype {
             variable: $n,
-            body: Box::new(ptp!($($t)+)),
+            body: Box::new($crate::ptp!($($t)+)),
         }
     };
     ($($t:tt)+) => {
-        $crate::TypeSchema::Monotype(tp!($($t)+))
+        $crate::TypeSchema::Monotype($crate::tp!($($t)+))
     };
 }

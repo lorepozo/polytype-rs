@@ -2,8 +2,8 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
-use parser::{parse_type, parse_typeschema};
-use {Context, Name};
+use crate::parser::{parse_type, parse_typeschema};
+use crate::{Context, Name};
 
 /// Represents a [type variable][1] (an unknown type).
 ///
@@ -38,12 +38,10 @@ impl<N: Name> TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::{ptp, tp};
     /// let t = ptp!(0; @arrow[tp!(0), tp!(1)]); // ∀α. α → β
     /// assert!(t.is_bound(0));
     /// assert!(!t.is_bound(1));
-    /// # }
     /// ```
     pub fn is_bound(&self, v: Variable) -> bool {
         match *self {
@@ -57,11 +55,9 @@ impl<N: Name> TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::{ptp, tp};
     /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
     /// assert_eq!(t.bound_vars(), vec![0, 1]);
-    /// # }
     /// ```
     ///
     /// [`Variable`]: type.Variable.html
@@ -80,13 +76,11 @@ impl<N: Name> TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::{ptp, tp};
     /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
     /// let mut free = t.free_vars();
     /// free.sort();
     /// assert_eq!(free, vec![2, 3]);
-    /// # }
     /// ```
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
@@ -111,9 +105,7 @@ impl<N: Name> TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Context;
+    /// # use polytype::{ptp, tp, Context};
     /// let mut ctx = Context::default();
     ///
     /// let t1 = ptp!(3; list(tp!(3)));
@@ -123,7 +115,6 @@ impl<N: Name> TypeSchema<N> {
     /// let t2 = t2.instantiate(&mut ctx);
     /// assert_eq!(t1.to_string(), "list(t0)");
     /// assert_eq!(t2.to_string(), "list(t1)");
-    /// # }
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
@@ -174,9 +165,7 @@ impl<N: Name> TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::TypeSchema;
+    /// # use polytype::{ptp, tp, TypeSchema};
     /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
     /// let t_lit = ptp!(0; @arrow[tp!(0), tp!(0)]);
     /// assert_eq!(t_par, t_lit);
@@ -185,7 +174,6 @@ impl<N: Name> TypeSchema<N> {
     /// let t: TypeSchema<&'static str> = TypeSchema::parse(s).expect("valid type");
     /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
-    /// # }
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
@@ -195,7 +183,7 @@ impl<N: Name> TypeSchema<N> {
     }
 }
 impl<N: Name> fmt::Display for TypeSchema<N> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             TypeSchema::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
             TypeSchema::Monotype(ref t) => t.fmt(f),
@@ -239,11 +227,9 @@ pub enum Type<N: Name = &'static str> {
     /// With the macro:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::tp;
     /// let t = tp!(list(tp!(int)));
     /// assert_eq!(t.to_string(), "list(int)");
-    /// # }
     /// ```
     ///
     /// Function types, or "arrows", are constructed with either [`Type::arrow`], two
@@ -251,9 +237,7 @@ pub enum Type<N: Name = &'static str> {
     /// the macro:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::Type;
-    /// # fn main() {
+    /// # use polytype::{tp, Type};
     /// let t = Type::arrow(tp!(int), tp!(bool));
     /// assert_eq!(t.to_string(), "int → bool");
     ///
@@ -262,7 +246,6 @@ pub enum Type<N: Name = &'static str> {
     ///
     /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]); // prefer this over Type::from
     /// assert_eq!(t.to_string(), "int → int → bool");
-    /// # }
     /// ```
     ///
     /// [`Type::arrow`]: enum.Type.html#method.arrow
@@ -274,20 +257,16 @@ pub enum Type<N: Name = &'static str> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Type;
+    /// # use polytype::{tp, Type};
     /// // any function: α → β
     /// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1)]);
     /// assert_eq!(t.to_string(), "t0 → t1");
-    /// # }
     /// ```
     ///
     /// With the macro:
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::tp;
     /// // map: (α → β) → [α] → [β]
     /// let t = tp!(@arrow[
     ///     tp!(@arrow[tp!(0), tp!(1)]),
@@ -295,7 +274,6 @@ pub enum Type<N: Name = &'static str> {
     ///     tp!(list(tp!(1))),
     /// ]);
     /// assert_eq!(t.to_string(), "(t0 → t1) → list(t0) → list(t1)");
-    /// # }
     /// ```
     Variable(Variable),
 }
@@ -305,12 +283,9 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # use polytype::Type;
-    /// # fn main() {
+    /// # use polytype::{tp, Type};
     /// let t = Type::arrow(tp!(int), tp!(bool));
     /// assert_eq!(t.to_string(), "int → bool");
-    /// # }
     /// ```
     pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
         Type::Constructed(N::arrow(), vec![alpha, beta])
@@ -320,14 +295,12 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::{ptp, tp};
     /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
     /// if let Some((left, right)) = t.as_arrow() {
     ///     assert_eq!(left.to_string(), "int");
     ///     assert_eq!(right.to_string(), "int → bool");
     /// } else { unreachable!() }
-    /// # }
     /// ```
     pub fn as_arrow(&self) -> Option<(&Type<N>, &Type<N>)> {
         match *self {
@@ -373,15 +346,13 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::tp;
     /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
     /// if let Some(args) = t.args() {
     ///     assert_eq!(args.len(), 2);
     ///     assert_eq!(args[0].to_string(), "int");
     ///     assert_eq!(args[1].to_string(), "int");
     /// } else { unreachable!() }
-    /// # }
     /// ```
     pub fn args(&self) -> Option<VecDeque<&Type<N>>> {
         match *self {
@@ -408,13 +379,11 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
+    /// # use polytype::tp;
     /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
     /// if let Some(ret) = t.returns() {
     ///     assert_eq!(ret.to_string(), "bool");
     /// } else { unreachable!() }
-    /// # }
     /// ```
     pub fn returns(&self) -> Option<&Type<N>> {
         match *self {
@@ -441,9 +410,7 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Context;
+    /// # use polytype::{tp, Context};
     /// let mut ctx = Context::default();
     /// ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
     ///
@@ -451,7 +418,6 @@ impl<N: Name> Type<N> {
     /// assert_eq!(t.to_string(), "list(t0)");
     /// let t = t.apply(&ctx);
     /// assert_eq!(t.to_string(), "list(int)");
-    /// # }
     /// ```
     ///
     /// [`Context`]: struct.Context.html
@@ -473,9 +439,11 @@ impl<N: Name> Type<N> {
     /// [`apply`]: #method.apply
     pub fn apply_mut(&mut self, ctx: &Context<N>) {
         match *self {
-            Type::Constructed(_, ref mut args) => for t in args {
-                t.apply_mut(ctx)
-            },
+            Type::Constructed(_, ref mut args) => {
+                for t in args {
+                    t.apply_mut(ctx)
+                }
+            }
             Type::Variable(v) => {
                 *self = ctx
                     .substitution
@@ -492,9 +460,7 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::{Context, Type};
+    /// # use polytype::{tp, Context};
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(t.to_string(), "t0 → t1");
     ///
@@ -506,7 +472,6 @@ impl<N: Name> Type<N> {
     ///
     /// let t_gen = t.apply(&ctx).generalize(&[1]);
     /// assert_eq!(t_gen.to_string(), "int → t1");
-    /// # }
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
@@ -530,16 +495,13 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::{Context, Type};
+    /// # use polytype::tp;
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(t.to_string(), "t0 → t1");
     ///
     /// let mut vars = t.vars();
     /// vars.sort();
     /// assert_eq!(vars, vec![0, 1]);
-    /// # }
     /// ```
     pub fn vars(&self) -> Vec<Variable> {
         let mut s = HashSet::new();
@@ -548,9 +510,11 @@ impl<N: Name> Type<N> {
     }
     fn vars_internal(&self, s: &mut HashSet<Variable>) {
         match *self {
-            Type::Constructed(_, ref args) => for arg in args {
-                arg.vars_internal(s);
-            },
+            Type::Constructed(_, ref args) => {
+                for arg in args {
+                    arg.vars_internal(s);
+                }
+            }
             Type::Variable(v) => {
                 s.insert(v);
             }
@@ -561,9 +525,7 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Type;
+    /// # use polytype::tp;
     /// # use std::collections::HashMap;
     /// let t = tp!(@arrow[tp!(0), tp!(1)]);
     /// assert_eq!(t.to_string(), "t0 → t1");
@@ -574,7 +536,6 @@ impl<N: Name> Type<N> {
     ///
     /// let t = t.substitute(&substitution);
     /// assert_eq!(t.to_string(), "int → bool");
-    /// # }
     /// ```
     ///
     /// [`apply`]: #method.apply
@@ -595,9 +556,11 @@ impl<N: Name> Type<N> {
     /// [`substitute`]: #method.substitute
     pub fn substitute_mut(&mut self, substitution: &HashMap<Variable, Type<N>>) {
         match *self {
-            Type::Constructed(_, ref mut args) => for t in args {
-                t.substitute_mut(substitution)
-            },
+            Type::Constructed(_, ref mut args) => {
+                for t in args {
+                    t.substitute_mut(substitution)
+                }
+            }
             Type::Variable(v) => {
                 if let Some(t) = substitution.get(&v) {
                     *self = t.clone()
@@ -612,9 +575,7 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # #[macro_use] extern crate polytype;
-    /// # fn main() {
-    /// # use polytype::Type;
+    /// # use polytype::{tp, Type};
     /// let t_par = Type::parse("int -> hashmap(str, list(bool))").expect("valid type");
     /// let t_lit = tp!(@arrow[
     ///     tp!(int),
@@ -629,7 +590,6 @@ impl<N: Name> Type<N> {
     /// let t: Type<&'static str> = Type::parse(s).expect("valid type");
     /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
-    /// # }
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
@@ -638,7 +598,7 @@ impl<N: Name> Type<N> {
     }
 }
 impl<N: Name> fmt::Display for Type<N> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.show(true))
     }
 }

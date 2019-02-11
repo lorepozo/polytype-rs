@@ -10,7 +10,8 @@ documentation = "https://docs.rs/polytype"
 description = "A Hindley-Milner polymorphic typing system."
 keywords = ["typing", "language", "type", "inference", "unification"]
 categories = ["science", "data-structures", "algorithms"]
+edition = "2018"
 
 [dependencies]
-itertools = "0.7"
-nom = "4.0"
+itertools = "0.8"
+nom = "4.2"

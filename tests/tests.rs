@@ -1,5 +1,3 @@
-extern crate polytype;
-
 use std::collections::VecDeque;
 
 use polytype::*;
@@ -208,7 +206,8 @@ fn test_unify_one_side_polymorphic() {
     ctx.unify(
         &tp!(list(tp!(@arrow[tp!(int), tp!(bool)]))),
         &tp!(list(tp!(0))),
-    ).expect("one side polymorphic");
+    )
+    .expect("one side polymorphic");
 }
 
 #[test]
@@ -224,7 +223,8 @@ fn test_unify_both_sides_polymorphic() {
     ctx.unify(
         &tp!(list(tp!(@arrow[tp!(int), tp!(0)]))),
         &tp!(list(tp!(@arrow[tp!(1), tp!(bool)]))),
-    ).expect("both sides polymorphic");
+    )
+    .expect("both sides polymorphic");
 }
 
 #[test]
@@ -263,7 +263,8 @@ fn test_unify_nonstring_name() {
             )],
         ),
         &t,
-    ).expect("nonstring one side polymorphic");
+    )
+    .expect("nonstring one side polymorphic");
 
     let mut ctx = Context::default();
     let t = ts.instantiate(&mut ctx);
@@ -273,7 +274,8 @@ fn test_unify_nonstring_name() {
             Type::Constructed(N(2), vec![]),
         ),
         &t,
-    ).expect_err("nonstring incompatible types");
+    )
+    .expect_err("nonstring incompatible types");
 }
 
 #[test]
