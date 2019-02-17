@@ -180,3 +180,129 @@ impl Name for &'static str {
         *self == "→"
     }
 }
+
+/// An interface for things that are typable.
+///
+/// # Examples
+///
+/// In the simplest case, you statically know what the type is:
+///
+/// ```
+/// use polytype::{tp, Infer, Type, UnificationError};
+///
+/// struct MyPrimitive;
+/// impl Infer<()> for MyPrimitive {
+///     fn infer(&self, _ctx: &()) -> Result<Type, UnificationError> {
+///         Ok(tp!(my_thing_tp))
+///     }
+/// }
+///
+/// assert_eq!(MyPrimitive.infer(&()), Ok(tp!(my_thing_tp)));
+/// ```
+///
+/// A more complex case builds a new type given typed items.
+///
+/// ```
+/// use polytype::{ptp, tp, Context, Infer, Type, TypeSchema, UnificationError};
+/// use std::cell::RefCell;
+///
+/// type MyCtx = RefCell<Context>; // the RefCell allows us to mutate the context during inference
+///
+/// struct Primitive(TypeSchema);
+/// impl Infer<MyCtx> for Primitive {
+///     fn infer(&self, ctx: &MyCtx) -> Result<Type, UnificationError> {
+///         Ok(self.0.instantiate(&mut ctx.borrow_mut()))
+///     }
+/// }
+///
+/// struct Application<A, B> {
+///     left: A,
+///     right: B,
+/// }
+/// impl<A: Infer<MyCtx>, B: Infer<MyCtx>> Infer<MyCtx> for Application<A, B> {
+///     fn infer(&self, ctx: &MyCtx) -> Result<Type, UnificationError> {
+///         let ft = self.left.infer(ctx)?;
+///         let xt = self.right.infer(ctx)?;
+///         let mut ctx = ctx.borrow_mut();
+///         let ret = ctx.new_variable();
+///         ctx.unify(&ft, &Type::arrow(xt, ret.clone()))?;
+///         Ok(ret.apply(&ctx))
+///     }
+/// }
+///
+/// let f = Primitive(ptp!(@arrow[tp!(foo), tp!(bar)]));
+/// let x = Primitive(ptp!(foo));
+/// let fx = Application { left: f, right: x };
+/// let ctx = RefCell::new(Context::default());
+/// assert_eq!(fx.infer(&ctx), Ok(tp!(bar)));
+/// ```
+///
+/// A more sophisticated case has the types maintained externally:
+///
+/// ```
+/// use polytype::{ptp, tp, Context, Infer, Type, TypeSchema, UnificationError};
+/// use std::{cell::RefCell, collections::HashMap};
+///
+/// // in this example, every Term has a Type defined through the Lexicon
+/// enum Term {
+///     GlobalVariable(u32),
+///     Application { op: u32, args: Vec<Term> },
+/// }
+/// struct Lexicon {
+///     ctx: RefCell<Context>,
+///     ops: HashMap<u32, TypeSchema>,
+///     global_vars: RefCell<HashMap<u32, Type>>,
+/// }
+///
+/// impl Infer<Lexicon> for Term {
+///     fn infer(&self, lex: &Lexicon) -> Result<Type, UnificationError> {
+///         match self {
+///             Term::GlobalVariable(v) => Ok(lex
+///                 .global_vars
+///                 .borrow_mut()
+///                 .entry(*v)
+///                 .or_insert_with(|| lex.ctx.borrow_mut().new_variable())
+///                 .clone()),
+///             Term::Application { op, args } => {
+///                 let mut arg_types: Vec<Type> = args
+///                     .into_iter()
+///                     .map(|arg| arg.infer(lex))
+///                     .collect::<Result<Vec<_>, _>>()?;
+///                 let mut ctx = lex.ctx.borrow_mut();
+///                 let ret = ctx.new_variable();
+///                 arg_types.push(ret.clone());
+///                 let func_type = lex.ops[op].instantiate(&mut ctx);
+///                 ctx.unify(&func_type, &Type::from(arg_types))?;
+///                 Ok(ret.apply(&ctx))
+///             }
+///         }
+///     }
+/// }
+///
+/// let mut h = HashMap::new();
+/// h.insert(0, ptp!(0; @arrow[tp!(0), tp!(foo)]));
+/// h.insert(1, ptp!(@arrow[tp!(bar), tp!(baz)]));
+/// let lex = Lexicon {
+///     ctx: RefCell::new(Context::default()),
+///     ops: h,
+///     global_vars: RefCell::new(HashMap::new()),
+/// };
+/// let term = Term::Application {
+///     op: 0,
+///     args: vec![Term::Application {
+///         op: 1,
+///         args: vec![Term::GlobalVariable(42)],
+///     }],
+/// };
+/// assert_eq!(term.infer(&lex), Ok(tp!(foo)));
+/// assert_eq!(
+///     lex.global_vars
+///         .borrow()
+///         .get(&42)
+///         .map(|t| t.apply(&lex.ctx.borrow())),
+///     Some(tp!(bar))
+/// );
+/// ```
+pub trait Infer<Context, E = UnificationError, N: Name = &'static str> {
+    fn infer(&self, ctx: &Context) -> Result<Type<N>, E>;
+}
