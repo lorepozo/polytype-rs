@@ -1,6 +1,9 @@
 use nom::{alpha, digit, types::CompleteStr};
 use nom::{alt, call_m, do_parse, expr_res, map, map_res, method, opt, separated_list, tag, ws};
 
+#[allow(unused_imports)]
+use nom::call; // FIXME see https://github.com/Geal/nom/pull/871
+
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 
