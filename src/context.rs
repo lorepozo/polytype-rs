@@ -52,6 +52,33 @@ impl<N: Name> Context<N> {
     pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
         &self.substitution
     }
+    /// Clears the substitution managed by the context.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{Type, Context, ptp, tp};
+    /// let mut ctx = Context::default();
+    ///
+    /// // Get a fresh variable
+    /// let t0 = ctx.new_variable();
+    /// let t1 = ctx.new_variable();
+    ///
+    /// let clean = ctx.clone();
+    ///
+    /// if let Type::Variable(N) = t0 {
+    ///     ctx.extend(N, tp![t1]);
+    ///     let dirty = ctx.clone();
+    ///
+    ///     ctx.clean();
+    ///
+    ///     assert_eq!(clean, ctx);
+    ///     assert_ne!(clean, dirty);
+    /// }
+    /// ```
+    pub fn clean(&mut self) {
+        self.substitution = HashMap::new();
+    }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
     ///
