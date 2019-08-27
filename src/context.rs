@@ -1,6 +1,6 @@
-use std::{collections::HashMap, error, fmt};
-
 use crate::{Name, Type, TypeSchema, Variable};
+use indexmap::IndexMap;
+use std::{error, fmt};
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,21 +36,29 @@ impl<N: Name + fmt::Debug> error::Error for UnificationError<N> {
 /// [`Type`]: enum.Type.html
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
-    pub(crate) substitution: HashMap<Variable, Type<N>>,
+    pub(crate) substitution: IndexMap<Variable, Type<N>>,
     next: Variable,
 }
 impl<N: Name> Default for Context<N> {
     fn default() -> Self {
         Context {
-            substitution: HashMap::new(),
+            substitution: IndexMap::new(),
             next: 0,
         }
     }
 }
 impl<N: Name> Context<N> {
     /// The substitution managed by the context.
-    pub fn substitution(&self) -> &HashMap<Variable, Type<N>> {
+    pub fn substitution(&self) -> &IndexMap<Variable, Type<N>> {
         &self.substitution
+    }
+    /// The number of constraints in the substitution.
+    pub fn len(&self) -> usize {
+        self.substitution.len()
+    }
+    /// `true` if the substitution has any constraints, else `false`.
+    pub fn is_empty(&self) -> bool {
+        self.substitution.is_empty()
     }
     /// Clears the substitution managed by the context.
     ///
@@ -77,7 +85,16 @@ impl<N: Name> Context<N> {
     /// }
     /// ```
     pub fn clean(&mut self) {
-        self.substitution = HashMap::new();
+        self.substitution = IndexMap::new();
+    }
+    pub fn rollback(&mut self, n: usize) {
+        if n == 0 {
+            self.clean()
+        } else {
+            while n < self.substitution.len() {
+                self.substitution.pop();
+            }
+        }
     }
     /// Create a new substitution for [`Type::Variable`] number `v` to the
     /// [`Type`] `t`.
@@ -177,14 +194,14 @@ impl<N: Name> Context<N> {
     /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
     /// [`instantiate`]: enum.Type.html#method.instantiate
     pub fn unify(&mut self, t1: &Type<N>, t2: &Type<N>) -> Result<(), UnificationError<N>> {
-        let mut t1 = t1.clone();
-        let mut t2 = t2.clone();
-        t1.apply_mut(self);
-        t2.apply_mut(self);
-        let mut ctx = self.clone();
-        ctx.unify_internal(t1, t2)?;
-        *self = ctx;
-        Ok(())
+        let rollback_n = self.substitution.len();
+        let t1 = t1.apply(self);
+        let t2 = t2.apply(self);
+        let result = self.unify_internal(t1, t2);
+        if result.is_err() {
+            self.rollback(rollback_n);
+        }
+        result
     }
     /// Like [`unify`], but may affect the context even under failure. Hence, use this if you
     /// discard the context upon failure.
@@ -265,7 +282,7 @@ impl<N: Name> Context<N> {
     /// assert_eq!(sub[&1], tp!(bool));
     /// ```
     pub fn confine(&mut self, keep: &[Variable]) {
-        let mut substitution = HashMap::new();
+        let mut substitution = IndexMap::new();
         for v in keep {
             substitution.insert(*v, self.substitution[v].clone());
         }
