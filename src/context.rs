@@ -372,7 +372,7 @@ impl<N: Name> Context<N> {
 ///
 /// [`Context::merge`]: struct.Context.html#method.merge
 pub struct ContextChange {
-    delta: u16,
+    delta: usize,
     sacreds: Vec<Variable>,
 }
 impl ContextChange {

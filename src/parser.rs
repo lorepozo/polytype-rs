@@ -22,7 +22,7 @@ pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ()> {
     }
 }
 
-fn nom_u16(inp: CompleteStr<'_>) -> Result<u16, ParseIntError> {
+fn nom_usize(inp: CompleteStr<'_>) -> Result<usize, ParseIntError> {
     inp.parse()
 }
 
@@ -37,7 +37,7 @@ impl<N: Name> Parser<N> {
     method!(
         var<Parser<N>, CompleteStr<'_>, Type<N>>,
         self,
-        do_parse!(tag!("t") >> num: map_res!(digit, nom_u16) >> (Type::Variable(num)))
+        do_parse!(tag!("t") >> num: map_res!(digit, nom_usize) >> (Type::Variable(num)))
     );
     method!(
         constructed_simple<Parser<N>, CompleteStr<'_>, Type<N>>,
@@ -78,7 +78,7 @@ impl<N: Name> Parser<N> {
                do_parse!(
                    opt!(tag!("∀")) >>
                    tag!("t") >>
-                   variable: map_res!(digit, nom_u16) >>
+                   variable: map_res!(digit, nom_usize) >>
                    ws!(tag!(".")) >>
                    body: map!(call_m!(self.polytype), Box::new) >>
                    (TypeSchema::Polytype{variable, body}))
