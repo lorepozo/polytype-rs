@@ -8,7 +8,7 @@ use crate::{Context, Name};
 /// Represents a [type variable][1] (an unknown type).
 ///
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Free_type_variables
-pub type Variable = u16;
+pub type Variable = usize;
 
 /// Represents [polytypes][1] (uninstantiated, universally quantified types).
 ///
