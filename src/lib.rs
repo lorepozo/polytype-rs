@@ -101,6 +101,7 @@
 
 mod context;
 mod macros;
+#[cfg(feature = "parser")]
 mod parser;
 mod types;
 
