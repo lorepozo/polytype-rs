@@ -97,3 +97,60 @@ impl<N: Name> Parser<N> {
                  map!(call_m!(self.monotype), TypeSchema::Monotype))
         );
 }
+impl<N: Name> TypeSchema<N> {
+    /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
+    /// This is a **leaky** operation and should be avoided wherever possible:
+    /// names of constructed types will remain until program termination.
+    ///
+    /// The "for-all" `∀` is optional.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{ptp, tp, TypeSchema};
+    /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
+    /// let t_lit = ptp!(0; @arrow[tp!(0), tp!(0)]);
+    /// assert_eq!(t_par, t_lit);
+    ///
+    /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
+    /// let t: TypeSchema<&'static str> = TypeSchema::parse(s).expect("valid type");
+    /// let round_trip = t.to_string();
+    /// assert_eq!(s, round_trip);
+    /// ```
+    ///
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn parse(s: &str) -> Result<TypeSchema<N>, ()> {
+        parse_typeschema(s)
+    }
+}
+impl<N: Name> Type<N> {
+    /// Parse a type from a string. This round-trips with [`Display`]. This is a
+    /// **leaky** operation and should be avoided wherever possible: names of
+    /// constructed types will remain until program termination.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{tp, Type};
+    /// let t_par = Type::parse("int -> hashmap(str, list(bool))").expect("valid type");
+    /// let t_lit = tp!(@arrow[
+    ///     tp!(int),
+    ///     tp!(hashmap(
+    ///         tp!(str),
+    ///         tp!(list(tp!(bool))),
+    ///     )),
+    /// ]);
+    /// assert_eq!(t_par, t_lit);
+    ///
+    /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
+    /// let t: Type<&'static str> = Type::parse(s).expect("valid type");
+    /// let round_trip = t.to_string();
+    /// assert_eq!(s, round_trip);
+    /// ```
+    ///
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    pub fn parse(s: &str) -> Result<Type<N>, ()> {
+        parse_type(s)
+    }
+}

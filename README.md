@@ -67,3 +67,8 @@ assert_eq!(t2.to_string(), "list(t1)");
 ```
 
 See the [documentation](https://docs.rs/polytype) for more details.
+
+## Features
+By default `polytype` includes a type parser that can be invoked with `Type::parse`.
+This can be disabled with `default-features = false`.
+
