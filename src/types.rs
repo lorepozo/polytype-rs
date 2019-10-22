@@ -430,7 +430,7 @@ impl<N: Name> Type<N> {
             Type::Variable(v) => ctx
                 .substitution
                 .get(&v)
-                .cloned()
+                .map(|tp| tp.apply(ctx))
                 .unwrap_or_else(|| Type::Variable(v)),
         }
     }
@@ -448,7 +448,7 @@ impl<N: Name> Type<N> {
                 *self = ctx
                     .substitution
                     .get(&v)
-                    .cloned()
+                    .map(|tp| tp.apply(ctx))
                     .unwrap_or_else(|| Type::Variable(v));
             }
         }
