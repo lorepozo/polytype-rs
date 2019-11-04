@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 use crate::parser::{parse_type, parse_typeschema};
@@ -85,16 +85,18 @@ impl<N: Name> TypeSchema<N> {
     /// [`Variable`]: type.Variable.html
     /// [`TypeSchema`]: enum.TypeSchema.html
     pub fn free_vars(&self) -> Vec<Variable> {
-        let mut s = HashSet::new();
-        self.free_vars_internal(&mut s);
-        s.into_iter().collect()
+        let mut vars = vec![];
+        self.free_vars_internal(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
     }
-    fn free_vars_internal(&self, s: &mut HashSet<Variable>) {
+    fn free_vars_internal(&self, vars: &mut Vec<Variable>) {
         match *self {
-            TypeSchema::Monotype(ref t) => t.vars_internal(s),
+            TypeSchema::Monotype(ref t) => t.vars_internal(vars),
             TypeSchema::Polytype { variable, ref body } => {
-                body.free_vars_internal(s);
-                s.remove(&variable);
+                body.free_vars_internal(vars);
+                *vars = vars.iter().filter(|&v| v != &variable).cloned().collect();
             }
         }
     }
@@ -504,20 +506,20 @@ impl<N: Name> Type<N> {
     /// assert_eq!(vars, vec![0, 1]);
     /// ```
     pub fn vars(&self) -> Vec<Variable> {
-        let mut s = HashSet::new();
-        self.vars_internal(&mut s);
-        s.into_iter().collect()
+        let mut vars = vec![];
+        self.vars_internal(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
     }
-    fn vars_internal(&self, s: &mut HashSet<Variable>) {
+    fn vars_internal(&self, vars: &mut Vec<Variable>) {
         match *self {
             Type::Constructed(_, ref args) => {
                 for arg in args {
-                    arg.vars_internal(s);
+                    arg.vars_internal(vars);
                 }
             }
-            Type::Variable(v) => {
-                s.insert(v);
-            }
+            Type::Variable(v) => vars.push(v),
         }
     }
     /// Perform a substitution. This is analogous to [`apply`].
