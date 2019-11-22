@@ -350,6 +350,29 @@ impl<N: Name> Type<N> {
             _ => None,
         }
     }
+    /// If the type is an arrow, recursively get all curried function arguments.
+    pub fn args_destruct(self) -> Option<Vec<Type<N>>> {
+        match self {
+            Type::Constructed(n, mut args) if n.is_arrow() => {
+                let mut tps = Vec::with_capacity(1);
+                args.reverse();
+                tps.push(args.pop().unwrap());
+                let mut tp = args.pop().unwrap();
+                loop {
+                    match tp {
+                        Type::Constructed(n, mut args) if n.is_arrow() => {
+                            args.reverse();
+                            tps.push(args.pop().unwrap());
+                            tp = args.pop().unwrap();
+                        }
+                        _ => break,
+                    }
+                }
+                Some(tps)
+            }
+            _ => None,
+        }
+    }
     /// If the type is an arrow, get its ultimate return type.
     ///
     /// # Examples
@@ -404,9 +427,10 @@ impl<N: Name> Type<N> {
                 Type::Constructed(name.clone(), args)
             }
             Type::Variable(v) => ctx
-                .substitution
+                .cache
                 .get(&v)
-                .map(|tp| tp.apply(ctx))
+                .map(|tp| tp.clone())
+                .or_else(|| ctx.substitution.get(&v).map(|tp| tp.apply(ctx)))
                 .unwrap_or_else(|| Type::Variable(v)),
         }
     }
@@ -422,10 +446,56 @@ impl<N: Name> Type<N> {
             }
             Type::Variable(v) => {
                 *self = ctx
-                    .substitution
+                    .cache
                     .get(&v)
-                    .map(|tp| tp.apply(ctx))
+                    .map(|tp| tp.clone())
+                    .or_else(|| ctx.substitution.get(&v).map(|tp| tp.apply(ctx)))
                     .unwrap_or_else(|| Type::Variable(v));
+            }
+        }
+    }
+    /// Applies the type in a [`Context`], performing path compression.
+    pub fn apply_compress(&self, ctx: &mut Context<N>) -> Type<N> {
+        match *self {
+            Type::Constructed(ref name, ref args) => {
+                let args = args.iter().map(|t| t.apply_compress(ctx)).collect();
+                Type::Constructed(name.clone(), args)
+            }
+            Type::Variable(v) => {
+                if let Some(tp) = ctx.cache.get(&v) {
+                    tp.clone()
+                } else if let Some(tp) = ctx.substitution.get(&v) {
+                    let mut tp = tp.clone();
+                    tp.apply_mut_compress(ctx);
+                    ctx.cache.insert(v, tp.clone());
+                    tp
+                } else {
+                    self.clone()
+                }
+            }
+        }
+    }
+    /// Like [`apply_compress`], but works in-place.
+    ///
+    /// [`apply`]: #method.apply
+    pub fn apply_mut_compress(&mut self, ctx: &mut Context<N>) {
+        match *self {
+            Type::Constructed(_, ref mut args) => {
+                for t in args {
+                    t.apply_mut_compress(ctx)
+                }
+            }
+            Type::Variable(v) => {
+                *self = if let Some(tp) = ctx.cache.get(&v) {
+                    tp.clone()
+                } else if let Some(tp) = ctx.substitution.get(&v) {
+                    let mut tp = tp.clone();
+                    tp.apply_mut_compress(ctx);
+                    ctx.cache.insert(v, tp.clone());
+                    tp
+                } else {
+                    self.clone()
+                };
             }
         }
     }

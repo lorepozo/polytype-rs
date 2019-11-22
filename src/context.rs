@@ -1,6 +1,6 @@
 use crate::{Name, Type, TypeSchema, Variable};
 use indexmap::IndexMap;
-use std::{error, fmt};
+use std::{collections::HashMap, error, fmt};
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,12 +37,14 @@ impl<N: Name + fmt::Debug> error::Error for UnificationError<N> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
     pub(crate) substitution: IndexMap<Variable, Type<N>>,
+    pub(crate) cache: HashMap<Variable, Type<N>>,
     next: Variable,
 }
 impl<N: Name> Default for Context<N> {
     fn default() -> Self {
         Context {
             substitution: IndexMap::new(),
+            cache: HashMap::new(),
             next: 0,
         }
     }
@@ -85,10 +87,12 @@ impl<N: Name> Context<N> {
     /// }
     /// ```
     pub fn clean(&mut self) {
-        self.substitution = IndexMap::new();
+        self.substitution.clear();
+        self.cache = HashMap::new();
     }
-    /// Removes the previous `n` substitutions added to the `Context`.
+    /// Removes all but `n` substitutions added to the `Context`.
     pub fn rollback(&mut self, n: usize) {
+        self.cache = HashMap::new();
         if n == 0 {
             self.clean()
         } else {
@@ -196,8 +200,8 @@ impl<N: Name> Context<N> {
     /// [`instantiate`]: enum.Type.html#method.instantiate
     pub fn unify(&mut self, t1: &Type<N>, t2: &Type<N>) -> Result<(), UnificationError<N>> {
         let rollback_n = self.substitution.len();
-        let t1 = t1.apply(self);
-        let t2 = t2.apply(self);
+        let t1 = t1.apply_compress(self);
+        let t2 = t2.apply_compress(self);
         let result = self.unify_internal(t1, t2);
         if result.is_err() {
             self.rollback(rollback_n);
@@ -213,8 +217,8 @@ impl<N: Name> Context<N> {
         mut t1: Type<N>,
         mut t2: Type<N>,
     ) -> Result<(), UnificationError<N>> {
-        t1.apply_mut(self);
-        t2.apply_mut(self);
+        t1.apply_mut_compress(self);
+        t2.apply_mut_compress(self);
         self.unify_internal(t1, t2)
     }
     /// unify_internal may mutate the context even with an error. The context on
@@ -228,7 +232,7 @@ impl<N: Name> Context<N> {
                 if t2.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
-                    self.extend(v, t2.clone());
+                    self.extend(v, t2);
                     Ok(())
                 }
             }
@@ -236,7 +240,7 @@ impl<N: Name> Context<N> {
                 if t1.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
-                    self.extend(v, t1.clone());
+                    self.extend(v, t1);
                     Ok(())
                 }
             }
@@ -248,8 +252,8 @@ impl<N: Name> Context<N> {
                     ))
                 } else {
                     for (mut t1, mut t2) in a1.into_iter().zip(a2) {
-                        t1.apply_mut(self);
-                        t2.apply_mut(self);
+                        t1.apply_mut_compress(self);
+                        t2.apply_mut_compress(self);
                         self.unify_internal(t1, t2)?;
                     }
                     Ok(())
