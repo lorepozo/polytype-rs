@@ -168,7 +168,7 @@ impl Name for &'static str {
     }
     #[inline(always)]
     fn show(&self) -> String {
-        self.to_string()
+        (*self).to_string()
     }
     /// **LEAKY** because it gives the string a static lifetime.
     #[inline(always)]
