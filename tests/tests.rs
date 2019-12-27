@@ -330,6 +330,7 @@ fn test_merge_with_sacreds() {
     assert_eq!(ctx.new_variable(), tp!(7));
 }
 
+#[cfg(feature = "parser")]
 #[test]
 fn test_parse() {
     let t = tp!(int);
