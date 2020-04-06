@@ -429,8 +429,8 @@ impl<N: Name> Type<N> {
             Type::Variable(v) => ctx
                 .cache
                 .get(&v)
-                .cloned()
-                .or_else(|| ctx.substitution.get(&v).map(|tp| tp.apply(ctx)))
+                .or_else(|| ctx.substitution.get(&v))
+                .map(|tp| tp.apply(ctx))
                 .unwrap_or_else(|| Type::Variable(v)),
         }
     }
@@ -448,8 +448,8 @@ impl<N: Name> Type<N> {
                 *self = ctx
                     .cache
                     .get(&v)
-                    .cloned()
-                    .or_else(|| ctx.substitution.get(&v).map(|tp| tp.apply(ctx)))
+                    .or_else(|| ctx.substitution.get(&v))
+                    .map(|tp| tp.apply(ctx))
                     .unwrap_or_else(|| Type::Variable(v));
             }
         }
@@ -461,18 +461,17 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.apply_compress(ctx)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => {
-                if let Some(tp) = ctx.cache.get(&v) {
-                    tp.clone()
-                } else if let Some(tp) = ctx.substitution.get(&v) {
-                    let mut tp = tp.clone();
+            Type::Variable(v) => ctx
+                .cache
+                .get(&v)
+                .or_else(|| ctx.substitution.get(&v))
+                .cloned()
+                .map(|mut tp| {
                     tp.apply_mut_compress(ctx);
                     ctx.cache.insert(v, tp.clone());
                     tp
-                } else {
-                    self.clone()
-                }
-            }
+                })
+                .unwrap_or_else(|| self.clone()),
         }
     }
     /// Like [`apply_compress`], but works in-place.
@@ -486,16 +485,17 @@ impl<N: Name> Type<N> {
                 }
             }
             Type::Variable(v) => {
-                *self = if let Some(tp) = ctx.cache.get(&v) {
-                    tp.clone()
-                } else if let Some(tp) = ctx.substitution.get(&v) {
-                    let mut tp = tp.clone();
-                    tp.apply_mut_compress(ctx);
-                    ctx.cache.insert(v, tp.clone());
-                    tp
-                } else {
-                    self.clone()
-                };
+                *self = ctx
+                    .cache
+                    .get(&v)
+                    .or_else(|| ctx.substitution.get(&v))
+                    .cloned()
+                    .map(|mut tp| {
+                        tp.apply_mut_compress(ctx);
+                        ctx.cache.insert(v, tp.clone());
+                        tp
+                    })
+                    .unwrap_or_else(|| self.clone());
             }
         }
     }
