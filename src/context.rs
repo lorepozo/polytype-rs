@@ -87,7 +87,7 @@ impl<N: Name> Context<N> {
     pub fn clean(&mut self) {
         self.substitution = IndexMap::new();
     }
-    /// Removes the previous `n` substitutions added to the `Context`.
+    /// Removes previous substitutions added to the `Context` until there are only `n` remaining.
     pub fn rollback(&mut self, n: usize) {
         if n == 0 {
             self.clean()
