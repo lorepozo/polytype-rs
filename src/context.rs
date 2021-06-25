@@ -90,7 +90,7 @@ impl<N: Name> Context<N> {
         self.substitution.clear();
         self.cache = HashMap::new();
     }
-    /// Removes all but `n` substitutions added to the `Context`.
+    /// Removes previous substitutions added to the `Context` until there are only `n` remaining.
     pub fn rollback(&mut self, n: usize) {
         self.cache = HashMap::new();
         if n == 0 {
