@@ -115,13 +115,13 @@ impl<N: Name> Context<N> {
     /// ```
     pub fn clean(&mut self) {
         self.substitution.clear();
-        self.path_compression_cache = RefCell::new(HashMap::new());
+        self.path_compression_cache.get_mut().clear();
     }
     /// Removes previous substitutions added to the `Context` until there are only `n` remaining.
     pub fn rollback(&mut self, n: usize) {
-        self.path_compression_cache = RefCell::new(HashMap::new());
+        self.path_compression_cache.get_mut().clear();
         if n == 0 {
-            self.clean()
+            self.substitution.clear();
         } else {
             while n < self.substitution.len() {
                 self.substitution.pop();
