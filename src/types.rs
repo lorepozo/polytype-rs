@@ -424,17 +424,30 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.apply(ctx)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => ctx
-                .cache
-                .get(&v)
-                .or_else(|| ctx.substitution.get(&v))
-                .map(|tp| tp.apply(ctx))
-                .unwrap_or_else(|| Type::Variable(v)),
+            Type::Variable(v) => {
+                let maybe_tp = ctx
+                    .path_compression_cache
+                    .borrow()
+                    .get(&v)
+                    .or_else(|| ctx.substitution.get(&v))
+                    .cloned();
+                maybe_tp
+                    .map(|mut tp| {
+                        tp.apply_mut(ctx);
+                        if ctx.path_compression_cache.borrow().get(&v) != Some(&tp) {
+                            ctx.path_compression_cache
+                                .borrow_mut()
+                                .insert(v, tp.clone());
+                        }
+                        tp
+                    })
+                    .unwrap_or_else(|| self.clone())
+            }
         }
     }
-    /// Like [`apply`], but works in-place.
+    /// Like [`apply_compress`], but works in-place.
     ///
-    /// [`apply`]: #method.apply
+    /// [`apply_compress`]: #method.apply_compress
     pub fn apply_mut(&mut self, ctx: &Context<N>) {
         match *self {
             Type::Constructed(_, ref mut args) => {
@@ -443,70 +456,18 @@ impl<N: Name> Type<N> {
                 }
             }
             Type::Variable(v) => {
-                *self = ctx
-                    .cache
+                let maybe_tp = ctx
+                    .path_compression_cache
+                    .borrow()
                     .get(&v)
                     .or_else(|| ctx.substitution.get(&v))
-                    .map(|tp| tp.apply(ctx))
-                    .unwrap_or_else(|| Type::Variable(v));
-            }
-        }
-    }
-    /// Applies the type in a [`Context`], performing path compression.
-    /// 
-    /// Path compression is a technique commonly used in [Union-Find data structures]. We apply it
-    /// here so that whenever a chain of substitutions is traversed, each variable is updated to
-    /// point to its ultimate value. For example, the chain:
-    ///
-    /// `t0 ↦ t1`, `t1 ↦ t2`, and `t2 ↦ int`
-    ///
-    /// becomes
-    /// 
-    /// `t0 ↦ int`, `t1 ↦ int`, and `t2 ↦ int`
-    ///
-    /// Rather than updating the actual mappings, [`Context`] maintains a `cache` of these
-    /// compressed mappings.
-    ///
-    /// [Union-Find data structure]: https://en.wikipedia.org/wiki/Disjoint-set_data_structure
-    /// [`Context`]: struct.Context.html
-    pub fn apply_compress(&self, ctx: &mut Context<N>) -> Type<N> {
-        match *self {
-            Type::Constructed(ref name, ref args) => {
-                let args = args.iter().map(|t| t.apply_compress(ctx)).collect();
-                Type::Constructed(name.clone(), args)
-            }
-            Type::Variable(v) => ctx
-                .cache
-                .get(&v)
-                .or_else(|| ctx.substitution.get(&v))
-                .cloned()
-                .map(|mut tp| {
-                    tp.apply_mut_compress(ctx);
-                    ctx.cache.insert(v, tp.clone());
-                    tp
-                })
-                .unwrap_or_else(|| self.clone()),
-        }
-    }
-    /// Like [`apply_compress`], but works in-place.
-    ///
-    /// [`apply_compress`]: #method.apply_compress
-    pub fn apply_mut_compress(&mut self, ctx: &mut Context<N>) {
-        match *self {
-            Type::Constructed(_, ref mut args) => {
-                for t in args {
-                    t.apply_mut_compress(ctx)
-                }
-            }
-            Type::Variable(v) => {
-                *self = ctx
-                    .cache
-                    .get(&v)
-                    .or_else(|| ctx.substitution.get(&v))
-                    .cloned()
+                    .cloned();
+                *self = maybe_tp
                     .map(|mut tp| {
-                        tp.apply_mut_compress(ctx);
-                        ctx.cache.insert(v, tp.clone());
+                        tp.apply_mut(ctx);
+                        ctx.path_compression_cache
+                            .borrow_mut()
+                            .insert(v, tp.clone());
                         tp
                     })
                     .unwrap_or_else(|| self.clone());
