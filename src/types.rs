@@ -86,7 +86,7 @@ impl<N: Name> TypeSchema<N> {
     pub fn free_vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.free_vars_internal(&mut vars);
-        vars.sort();
+        vars.sort_unstable();
         vars.dedup();
         vars
     }
@@ -527,7 +527,7 @@ impl<N: Name> Type<N> {
     pub fn vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.vars_internal(&mut vars);
-        vars.sort();
+        vars.sort_unstable();
         vars.dedup();
         vars
     }
@@ -566,10 +566,7 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.substitute(substitution)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => substitution
-                .get(&v)
-                .cloned()
-                .unwrap_or_else(|| Type::Variable(v)),
+            Type::Variable(v) => substitution.get(&v).cloned().unwrap_or(Type::Variable(v)),
         }
     }
     /// Like [`substitute`], but works in-place.
