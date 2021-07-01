@@ -106,6 +106,7 @@ mod parser;
 mod types;
 
 pub use context::{Context, ContextChange, UnificationError};
+pub use parser::ParseError;
 pub use types::{Type, TypeSchema, Variable};
 
 /// Types require a `Name` for comparison.
@@ -152,8 +153,8 @@ pub trait Name: Clone + Eq {
     /// with [`show`].
     ///
     /// [`show`]: #method.show
-    fn parse(_s: &str) -> Result<Self, ()> {
-        Err(())
+    fn parse(_s: &str) -> Result<Self, ParseError> {
+        Err(ParseError)
     }
 
     fn is_arrow(&self) -> bool {
@@ -172,7 +173,7 @@ impl Name for &'static str {
     }
     /// **LEAKY** because it gives the string a static lifetime.
     #[inline(always)]
-    fn parse(s: &str) -> Result<&'static str, ()> {
+    fn parse(s: &str) -> Result<&'static str, ParseError> {
         Ok(unsafe { &mut *Box::into_raw(s.to_string().into_boxed_str()) })
     }
     /// The rightwards arrow in unicode: `→`.

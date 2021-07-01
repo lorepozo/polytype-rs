@@ -12,16 +12,28 @@ use std::num::ParseIntError;
 
 use crate::{Name, Type, TypeSchema};
 
-pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ()> {
-    match Parser::default().monotype(CompleteStr(input)).1 {
-        Ok((_, t)) => Ok(t),
-        _ => Err(()),
+#[derive(Debug)]
+/// A failed parse.
+pub struct ParseError;
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ParseError")
     }
 }
-pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ()> {
+
+impl std::error::Error for ParseError {}
+
+pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ParseError> {
+    match Parser::default().monotype(CompleteStr(input)).1 {
+        Ok((_, t)) => Ok(t),
+        _ => Err(ParseError),
+    }
+}
+pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ParseError> {
     match Parser::default().polytype(CompleteStr(input)).1 {
         Ok((_, t)) => Ok(t),
-        _ => Err(()),
+        _ => Err(ParseError),
     }
 }
 
@@ -120,7 +132,7 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn parse(s: &str) -> Result<TypeSchema<N>, ()> {
+    pub fn parse(s: &str) -> Result<TypeSchema<N>, ParseError> {
         parse_typeschema(s)
     }
 }
@@ -150,7 +162,7 @@ impl<N: Name> Type<N> {
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
-    pub fn parse(s: &str) -> Result<Type<N>, ()> {
+    pub fn parse(s: &str) -> Result<Type<N>, ParseError> {
         parse_type(s)
     }
 }
