@@ -1,7 +1,7 @@
 [package]
 name = "polytype"
 version = "6.1.1"
-authors = ["Lucas Morales <lucas@lucasem.com>"]
+authors = ["Lucas Morales <lucas@lucasem.com>", "Joshua S. Rule <joshua.s.rule@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/lucasem/polytype-rs"
