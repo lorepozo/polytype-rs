@@ -1,284 +1,117 @@
+use crate::{
+    parser::{parse_type, parse_typeschema, ParseError},
+    Name, Source, Substitution, TypeContext,
+};
 use itertools::Itertools;
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
+use smallvec::{smallvec, SmallVec};
+use std::{error::Error, fmt};
 
-use crate::{Context, Name};
+/// The primary way [`Type`]s are handled. This is what a [`TypeContext`] returns when interning a [`Type`].
+///
+/// [`Type`]: enum.Type.html
+/// [`TypeContext`]: struct.TypeContext.html
+pub type Ty<'ctx, N = &'static str> = &'ctx Type<'ctx, N>;
+/// The primary way [`TypeSchema`]s are handled. This is what a [`TypeContext`] returns when interning a [`TypeSchema`].
+///
+/// [`TypeSchema`]: enum.TypeSchema.html
+/// [`TypeContext`]: struct.TypeContext.html
+pub type Schema<'ctx, N = &'static str> = &'ctx TypeSchema<'ctx, N>;
 
-/// Represents a [type variable][1] (an unknown type).
-///
-/// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Free_type_variables
-pub type Variable = usize;
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+/// A type variable representing a definite but unknown type (e.g. `t0`).
+pub struct Variable(pub usize);
 
-/// Represents [polytypes][1] (uninstantiated, universally quantified types).
-///
-/// The primary ways of creating a `TypeSchema` are with the [`ptp!`] macro or
-/// with [`Type::generalize`].
-///
-/// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Polytype
-/// [`ptp!`]: macro.ptp.html
-/// [`Type::generalize`]: enum.Type.html#method.generalize
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum TypeSchema<N: Name = &'static str> {
-    /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
-    Monotype(Type<N>),
-    /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
-    Polytype {
-        /// The [`Variable`] being bound
-        ///
-        /// [`Variable`]: type.Variable.html
-        variable: Variable,
-        /// The type in which `variable` is bound
-        body: Box<TypeSchema<N>>,
-    },
+/// Errors during unification.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnificationError<'ctx, N: Name = &'static str> {
+    /// `Occurs` happens when occurs checks fail (i.e. a type variable is
+    /// unified recursively). The id of the bad type variable is supplied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{tp, ptp, with_ctx, Type, UnificationError, Variable};
+    /// with_ctx(10, |ctx| {
+    ///     let t_1 = tp!(ctx, 0);
+    ///     let t_2 = tp!(ctx, list(tp!(ctx, 0)));
+    ///     assert_eq!(Type::unify(&[(t_1, t_2)], &ctx), Err(UnificationError::Occurs(Variable(0))));
+    /// })
+    /// ```
+    Occurs(Variable),
+    /// `Mismatch` happens when symbols or type variants don't unify because of
+    /// structural differences.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{tp, ptp, with_ctx, Type, UnificationError};
+    /// with_ctx(10, |ctx| {
+    ///     let t_1 = tp!(ctx, set(tp!(ctx, 0)));
+    ///     let t_2 = tp!(ctx, list(tp!(ctx, 0)));
+    ///     assert_eq!(Type::unify(&[(t_1, t_2)], &ctx), Err(UnificationError::Mismatch(t_1, t_2)));
+    /// })
+    /// ```
+    Mismatch(Ty<'ctx, N>, Ty<'ctx, N>),
 }
-impl<N: Name> TypeSchema<N> {
-    /// Checks whether a variable is bound in the quantification of a polytype.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use polytype::{ptp, tp};
-    /// let t = ptp!(0; @arrow[tp!(0), tp!(1)]); // ∀α. α → β
-    /// assert!(t.is_bound(0));
-    /// assert!(!t.is_bound(1));
-    /// ```
-    pub fn is_bound(&self, v: Variable) -> bool {
-        match *self {
-            TypeSchema::Monotype(_) => false,
-            TypeSchema::Polytype { variable, .. } if variable == v => true,
-            TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
-        }
-    }
-    /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use polytype::{ptp, tp};
-    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
-    /// assert_eq!(t.bound_vars(), vec![0, 1]);
-    /// ```
-    ///
-    /// [`Variable`]: type.Variable.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn bound_vars(&self) -> Vec<Variable> {
-        let mut t = self;
-        let mut bvs = Vec::new();
-        while let TypeSchema::Polytype { variable, ref body } = *t {
-            bvs.push(variable);
-            t = body
-        }
-        bvs
-    }
-    /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use polytype::{ptp, tp};
-    /// let t = ptp!(0, 1; @arrow[tp!(1), tp!(2), tp!(3)]); // ∀α. ∀β. β → ɣ → δ
-    /// let mut free = t.free_vars();
-    /// free.sort();
-    /// assert_eq!(free, vec![2, 3]);
-    /// ```
-    /// [`Variable`]: type.Variable.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn free_vars(&self) -> Vec<Variable> {
-        let mut vars = vec![];
-        self.free_vars_internal(&mut vars);
-        vars.sort_unstable();
-        vars.dedup();
-        vars
-    }
-    fn free_vars_internal(&self, vars: &mut Vec<Variable>) {
-        match *self {
-            TypeSchema::Monotype(ref t) => t.vars_internal(vars),
-            TypeSchema::Polytype { variable, ref body } => {
-                body.free_vars_internal(vars);
-                *vars = vars.iter().filter(|&v| v != &variable).cloned().collect();
-            }
-        }
-    }
-    /// Instantiate a [`TypeSchema`] in the context by removing quantifiers.
-    ///
-    /// All type variables will be replaced with fresh type variables.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use polytype::{ptp, tp, Context};
-    /// let mut ctx = Context::default();
-    ///
-    /// let t1 = ptp!(3; list(tp!(3)));
-    /// let t2 = ptp!(3; list(tp!(3)));
-    ///
-    /// let t1 = t1.instantiate(&mut ctx);
-    /// let t2 = t2.instantiate(&mut ctx);
-    /// assert_eq!(t1.to_string(), "list(t0)");
-    /// assert_eq!(t2.to_string(), "list(t1)");
-    /// ```
-    ///
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn instantiate(&self, ctx: &mut Context<N>) -> Type<N> {
-        self.instantiate_internal(ctx, &mut HashMap::new())
-    }
-    fn instantiate_internal(
-        &self,
-        ctx: &mut Context<N>,
-        substitution: &mut HashMap<Variable, Type<N>>,
-    ) -> Type<N> {
-        match *self {
-            TypeSchema::Monotype(ref t) => t.substitute(substitution),
-            TypeSchema::Polytype { variable, ref body } => {
-                substitution.insert(variable, ctx.new_variable());
-                body.instantiate_internal(ctx, substitution)
-            }
-        }
-    }
-    /// Like [`instantiate`], but works in-place.
-    ///
-    /// [`instantiate`]: #method.instantiate
-    pub fn instantiate_owned(self, ctx: &mut Context<N>) -> Type<N> {
-        self.instantiate_owned_internal(ctx, &mut HashMap::new())
-    }
-    fn instantiate_owned_internal(
-        self,
-        ctx: &mut Context<N>,
-        substitution: &mut HashMap<Variable, Type<N>>,
-    ) -> Type<N> {
-        match self {
-            TypeSchema::Monotype(mut t) => {
-                t.substitute_mut(substitution);
-                t
-            }
-            TypeSchema::Polytype { variable, body } => {
-                substitution.insert(variable, ctx.new_variable());
-                body.instantiate_owned_internal(ctx, substitution)
-            }
-        }
-    }
-}
-impl<N: Name> fmt::Display for TypeSchema<N> {
+impl<'ctx, N: Name> fmt::Display for UnificationError<'ctx, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            TypeSchema::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
-            TypeSchema::Monotype(ref t) => t.fmt(f),
+            UnificationError::Occurs(v) => write!(f, "Occurs({})", v.0),
+            UnificationError::Mismatch(ref t1, ref t2) => {
+                write!(f, "Mismatch({}, {})", t1.show(false), t2.show(false))
+            }
         }
     }
 }
+impl<'ctx, N: Name + fmt::Debug> Error for UnificationError<'ctx, N> {
+    fn description(&self) -> &'static str {
+        "unification failed"
+    }
+}
 
-/// Represents [monotypes][1] (fully instantiated, unquantified types).
-///
-/// The primary ways to create a `Type` are with either the [`tp!`] macro or
-/// [`TypeSchema::instantiate`]. [`Type::arrow`] constructs function types (i.e.  `α → β`), as does
-/// conversion (`Type::from`) with `Vec` and `VecDeque` for curried arrows.
-///
-/// [`tp!`]: macro.tp.html
-/// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
-/// [`Type::arrow`]: enum.TypeSchema.html#method.instantiate
-/// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Type<N: Name = &'static str> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A simple unquantified type.
+pub enum Type<'ctx, N: Name = &'static str> {
     /// Primitive or composite types (e.g. `int`, `List(α)`, `α → β`)
     ///
-    /// # Examples
-    ///
-    /// Primitives have no associated types:
-    ///
-    /// ```
-    /// # use polytype::Type;
-    /// let tint = Type::Constructed("int", vec![]);
-    /// assert_eq!(tint.to_string(), "int")
-    /// ```
-    ///
-    /// Composites have associated types:
-    ///
-    /// ```
-    /// # use polytype::Type;
-    /// let tint = Type::Constructed("int", vec![]);
-    /// let tlist_of_ints = Type::Constructed("list", vec![tint]);
-    /// assert_eq!(tlist_of_ints.to_string(), "list(int)");
-    /// ```
-    ///
-    /// With the macro:
-    ///
-    /// ```
-    /// # use polytype::tp;
-    /// let t = tp!(list(tp!(int)));
-    /// assert_eq!(t.to_string(), "list(int)");
-    /// ```
-    ///
-    /// Function types, or "arrows", are constructed with either [`Type::arrow`], two
-    /// implementations of `Type::from` — one for [`Vec<Type>`] and one for [`VecDeque<Type>`] — or
-    /// the macro:
-    ///
-    /// ```
-    /// # use polytype::{tp, Type};
-    /// let t = Type::arrow(tp!(int), tp!(bool));
-    /// assert_eq!(t.to_string(), "int → bool");
-    ///
-    /// let t = Type::from(vec![tp!(int), tp!(int), tp!(bool)]);
-    /// assert_eq!(t.to_string(), "int → int → bool");
-    ///
-    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]); // prefer this over Type::from
-    /// assert_eq!(t.to_string(), "int → int → bool");
-    /// ```
-    ///
-    /// [`Type::arrow`]: enum.Type.html#method.arrow
-    /// [`Vec<Type>`]: enum.Type.html#impl-From<Vec<Type<N>>>
-    /// [`VecDeque<Type>`]: enum.Type.html#impl-From<VecDeque<Type<N>>>
-    Constructed(N, Vec<Type<N>>),
+    /// For some `Type::Constructed(head, args)`:
+    /// - `head` is the type constructor.
+    /// - `args` are the arguments to `head`.
+    Constructed(&'ctx N, &'ctx [Ty<'ctx, N>]),
     /// Type variables (e.g. `α`, `β`).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use polytype::{tp, Type};
-    /// // any function: α → β
-    /// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1)]);
-    /// assert_eq!(t.to_string(), "t0 → t1");
-    /// ```
-    ///
-    /// With the macro:
-    ///
-    /// ```
-    /// # use polytype::tp;
-    /// // map: (α → β) → [α] → [β]
-    /// let t = tp!(@arrow[
-    ///     tp!(@arrow[tp!(0), tp!(1)]),
-    ///     tp!(list(tp!(0))),
-    ///     tp!(list(tp!(1))),
-    /// ]);
-    /// assert_eq!(t.to_string(), "(t0 → t1) → list(t0) → list(t1)");
-    /// ```
     Variable(Variable),
 }
-impl<N: Name> Type<N> {
-    /// Construct a function type (i.e. `alpha` → `beta`).
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A potentially quantified (i.e. parametrically polymorphic) type.
+pub enum TypeSchema<'ctx, N: Name = &'static str> {
+    /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
+    Monotype(Ty<'ctx, N>),
+    /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
     ///
-    /// # Examples
+    /// For some `TypeSchema::Polytype(variable, body)`:
+    /// - `variable` is the [`Variable`] being bound.
+    /// - `body` is the type in which `variable` is bound.
     ///
-    /// ```
-    /// # use polytype::{tp, Type};
-    /// let t = Type::arrow(tp!(int), tp!(bool));
-    /// assert_eq!(t.to_string(), "int → bool");
-    /// ```
-    pub fn arrow(alpha: Type<N>, beta: Type<N>) -> Type<N> {
-        Type::Constructed(N::arrow(), vec![alpha, beta])
-    }
+    /// [`Variable`]: type.Variable.html
+    Polytype(Variable, Schema<'ctx, N>),
+}
+
+impl<'ctx, N: Name> Type<'ctx, N> {
     /// If the type is an arrow, get its associated argument and return types.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{ptp, tp};
-    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
-    /// if let Some((left, right)) = t.as_arrow() {
-    ///     assert_eq!(left.to_string(), "int");
+    /// # use polytype::{tp, with_ctx, TypeContext};
+    /// with_ctx(10, |ctx| {
+    ///     let t = tp!(ctx, @arrow[tp!(ctx, char), tp!(ctx, int), tp!(ctx, bool)]);
+    ///     let (left, right) = t.as_arrow().expect("broken arrow");
+    ///     assert_eq!(left.to_string(), "char");
     ///     assert_eq!(right.to_string(), "int → bool");
-    /// } else { unreachable!() }
+    /// })
     /// ```
-    pub fn as_arrow(&self) -> Option<(&Type<N>, &Type<N>)> {
+    pub fn as_arrow(&self) -> Option<(Ty<'ctx, N>, Ty<'ctx, N>)> {
         match *self {
             Type::Constructed(ref n, ref args) if n.is_arrow() => Some((&args[0], &args[1])),
             _ => None,
@@ -286,15 +119,15 @@ impl<N: Name> Type<N> {
     }
     pub(crate) fn occurs(&self, v: Variable) -> bool {
         match *self {
-            Type::Constructed(_, ref args) => args.iter().any(|t| t.occurs(v)),
+            Type::Constructed(_, args) => args.iter().any(|t| t.occurs(v)),
             Type::Variable(n) => n == v,
         }
     }
     /// Supplying `is_return` helps arrows look cleaner.
     pub(crate) fn show(&self, is_return: bool) -> String {
         match *self {
-            Type::Variable(v) => format!("t{}", v),
-            Type::Constructed(ref name, ref args) => {
+            Type::Variable(v) => format!("t{}", v.0),
+            Type::Constructed(name, args) => {
                 if args.is_empty() {
                     name.show()
                 } else if name.is_arrow() {
@@ -310,7 +143,7 @@ impl<N: Name> Type<N> {
         }
     }
     /// Show specifically for arrow types
-    fn arrow_show(args: &[Type<N>], is_return: bool) -> String {
+    fn arrow_show(args: &[Ty<'ctx, N>], is_return: bool) -> String {
         if is_return {
             format!("{} → {}", args[0].show(false), args[1].show(true))
         } else {
@@ -322,46 +155,28 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::tp;
-    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
-    /// if let Some(args) = t.args() {
+    /// # use polytype::{tp, with_ctx, TypeContext};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = tp!(ctx, @arrow[tp!(ctx, char), tp!(ctx, int), tp!(ctx, bool)]);
+    ///     let args = t.args().expect("arguments");
     ///     assert_eq!(args.len(), 2);
-    ///     assert_eq!(args[0].to_string(), "int");
+    ///     assert_eq!(args[0].to_string(), "char");
     ///     assert_eq!(args[1].to_string(), "int");
-    /// } else { unreachable!() }
+    /// })
     /// ```
-    pub fn args(&self) -> Option<VecDeque<&Type<N>>> {
+    // TODO: convert Type::args to an iterator
+    // TODO: convert TypeContext::intern_args to take an iterator
+    pub fn args(&self) -> Option<Vec<Ty<'ctx, N>>> {
         match *self {
-            Type::Constructed(ref n, ref args) if n.is_arrow() => {
-                let mut tps = VecDeque::with_capacity(1);
-                tps.push_back(&args[0]);
+            Type::Constructed(n, args) if n.is_arrow() => {
+                let mut tps: Vec<Ty<'ctx, N>> = Vec::with_capacity(10);
+                tps.push(&args[0]);
                 let mut tp = &args[1];
                 loop {
                     match *tp {
-                        Type::Constructed(ref n, ref args) if n.is_arrow() => {
-                            tps.push_back(&args[0]);
+                        Type::Constructed(n, args) if n.is_arrow() => {
+                            tps.push(&args[0]);
                             tp = &args[1];
-                        }
-                        _ => break,
-                    }
-                }
-                Some(tps)
-            }
-            _ => None,
-        }
-    }
-    /// If the type is an arrow, recursively get all curried function arguments.
-    pub fn args_destruct(self) -> Option<Vec<Type<N>>> {
-        match self {
-            Type::Constructed(n, mut args) if n.is_arrow() => {
-                let mut tps = Vec::with_capacity(1);
-                let mut tp = args.pop().unwrap();
-                tps.push(args.pop().unwrap());
-                loop {
-                    match tp {
-                        Type::Constructed(n, mut args) if n.is_arrow() => {
-                            tp = args.pop().unwrap();
-                            tps.push(args.pop().unwrap());
                         }
                         _ => break,
                     }
@@ -376,19 +191,20 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::tp;
-    /// let t = tp!(@arrow[tp!(int), tp!(int), tp!(bool)]);
-    /// if let Some(ret) = t.returns() {
+    /// # use polytype::{tp, with_ctx, TypeContext};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = tp!(ctx, @arrow[tp!(ctx, char), tp!(ctx, int), tp!(ctx, bool)]);
+    ///     let ret = t.returns().expect("return type");
     ///     assert_eq!(ret.to_string(), "bool");
-    /// } else { unreachable!() }
+    /// })
     /// ```
-    pub fn returns(&self) -> Option<&Type<N>> {
+    pub fn returns(&self) -> Option<Ty<'ctx, N>> {
         match *self {
-            Type::Constructed(ref n, ref args) if n.is_arrow() => {
+            Type::Constructed(n, args) if n.is_arrow() => {
                 let mut tp = &args[1];
                 loop {
                     match *tp {
-                        Type::Constructed(ref n, ref args) if n.is_arrow() => {
+                        Type::Constructed(n, args) if n.is_arrow() => {
                             tp = &args[1];
                         }
                         _ => break,
@@ -407,71 +223,34 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{tp, Context};
-    /// let mut ctx = Context::default();
-    /// ctx.unify(&tp!(0), &tp!(int)).expect("unifies");
+    /// # use polytype::{tp, with_ctx, Substitution, TypeContext, Type, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t_0 = tp!(ctx, 0);
+    ///     let t_int = tp!(ctx, int);
+    ///     let t_list_0 = tp!(ctx, list(t_0));
     ///
-    /// let t = tp!(list(tp!(0)));
-    /// assert_eq!(t.to_string(), "list(t0)");
-    /// let t = t.apply(&ctx);
-    /// assert_eq!(t.to_string(), "list(int)");
+    ///     let sub = Type::unify(&[(t_0, t_int)], &ctx).expect("unifies");
+    ///
+    ///     assert_eq!(t_list_0.to_string(), "list(t0)");
+    ///
+    ///     let t_list_int = t_list_0.apply(&sub);
+    ///     assert_eq!(t_list_int.to_string(), "list(int)");
+    /// })
     /// ```
     ///
     /// [`Context`]: struct.Context.html
-    pub fn apply(&self, ctx: &Context<N>) -> Type<N> {
+    // TODO: not sure if it's okay to assume this lifetime. I think so.
+    pub fn apply(&'ctx self, sub: &Substitution<'ctx, N>) -> Ty<'ctx, N> {
         match *self {
-            Type::Constructed(ref name, ref args) => {
-                let args = args.iter().map(|t| t.apply(ctx)).collect();
-                Type::Constructed(name.clone(), args)
-            }
-            Type::Variable(v) => {
-                let maybe_tp = ctx
-                    .path_compression_cache
-                    .borrow()
-                    .get(&v)
-                    .or_else(|| ctx.substitution.get(&v))
-                    .cloned();
-                maybe_tp
-                    .map(|mut tp| {
-                        tp.apply_mut(ctx);
-                        if ctx.path_compression_cache.borrow().get(&v) != Some(&tp) {
-                            ctx.path_compression_cache
-                                .borrow_mut()
-                                .insert(v, tp.clone());
-                        }
-                        tp
-                    })
-                    .unwrap_or_else(|| self.clone())
-            }
-        }
-    }
-    /// Like [`apply_compress`], but works in-place.
-    ///
-    /// [`apply_compress`]: #method.apply_compress
-    pub fn apply_mut(&mut self, ctx: &Context<N>) {
-        match *self {
-            Type::Constructed(_, ref mut args) => {
-                for t in args {
-                    t.apply_mut(ctx)
+            Type::Constructed(name, args) => {
+                let naive_args = args.iter().map(|t| t.apply(sub)).collect_vec();
+                if naive_args == args {
+                    self
+                } else {
+                    sub.ctx.intern_tcon(name, &naive_args)
                 }
             }
-            Type::Variable(v) => {
-                let maybe_tp = ctx
-                    .path_compression_cache
-                    .borrow()
-                    .get(&v)
-                    .or_else(|| ctx.substitution.get(&v))
-                    .cloned();
-                *self = maybe_tp
-                    .map(|mut tp| {
-                        tp.apply_mut(ctx);
-                        ctx.path_compression_cache
-                            .borrow_mut()
-                            .insert(v, tp.clone());
-                        tp
-                    })
-                    .unwrap_or_else(|| self.clone());
-            }
+            Type::Variable(v) => sub.get(v).map(|tp| tp.apply(sub)).unwrap_or_else(|| self),
         }
     }
     /// Generalizes the type by quantifying over free variables in a [`TypeSchema`].
@@ -481,33 +260,34 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{tp, Context};
-    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(t.to_string(), "t0 → t1");
+    /// # use polytype::{tp, with_ctx, Substitution, TypeContext, Type, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t_int = tp!(ctx, int);
+    ///     let t_0 = tp!(ctx, 0);
+    ///     let t_1 = tp!(ctx, 1);
+    ///     let t = tp!(ctx, @arrow[t_0, t_1]);
     ///
-    /// let mut ctx = Context::default();
-    /// ctx.extend(0, tp!(int));
+    ///     let mut sub = Substitution::with_capacity(ctx, 1);
+    ///     sub.add(Variable(0), t_int);
     ///
-    /// let t_gen = t.apply(&ctx).generalize(&[]);
-    /// assert_eq!(t_gen.to_string(), "∀t1. int → t1");
+    ///     let t_free = t.apply(&sub).generalize(&[], &ctx);
+    ///     assert_eq!(t_free.to_string(), "∀t1. int → t1");
     ///
-    /// let t_gen = t.apply(&ctx).generalize(&[1]);
-    /// assert_eq!(t_gen.to_string(), "int → t1");
+    ///     let t_bound = t.apply(&sub).generalize(&[Variable(1)], &ctx);
+    ///     assert_eq!(t_bound.to_string(), "int → t1");
+    /// })
     /// ```
     ///
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn generalize(&self, bound: &[Variable]) -> TypeSchema<N> {
-        let fvs = self
-            .vars()
-            .into_iter()
-            .filter(|x| !bound.contains(x))
-            .collect::<Vec<Variable>>();
-        let mut t = TypeSchema::Monotype(self.clone());
+    pub fn generalize(
+        &'ctx self,
+        bound: &[Variable],
+        ctx: &TypeContext<'ctx, N>,
+    ) -> Schema<'ctx, N> {
+        let fvs = self.vars().into_iter().filter(|x| !bound.contains(x));
+        let mut t: Schema<'ctx, N> = ctx.intern_monotype(self);
         for v in fvs {
-            t = TypeSchema::Polytype {
-                variable: v,
-                body: Box::new(t),
-            };
+            t = ctx.intern_polytype(v, t);
         }
         t
     }
@@ -516,24 +296,29 @@ impl<N: Name> Type<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::tp;
-    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(t.to_string(), "t0 → t1");
+    /// # use polytype::{with_ctx, Substitution, TypeContext, Type, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t_0 = ctx.intern_tvar(Variable(0));
+    ///     let t_1 = ctx.intern_tvar(Variable(1));
+    ///     let t = ctx.arrow(t_0, t_1);
     ///
-    /// let mut vars = t.vars();
-    /// vars.sort();
-    /// assert_eq!(vars, vec![0, 1]);
+    ///     assert_eq!(t.to_string(), "t0 → t1");
+    ///
+    ///     let mut vars = t.vars();
+    ///     vars.sort();
+    ///     assert_eq!(vars, vec![Variable(0), Variable(1)]);
+    /// })
     /// ```
     pub fn vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.vars_internal(&mut vars);
-        vars.sort_unstable();
+        vars.sort();
         vars.dedup();
         vars
     }
     fn vars_internal(&self, vars: &mut Vec<Variable>) {
         match *self {
-            Type::Constructed(_, ref args) => {
+            Type::Constructed(_, args) => {
                 for arg in args {
                     arg.vars_internal(vars);
                 }
@@ -541,82 +326,386 @@ impl<N: Name> Type<N> {
             Type::Variable(v) => vars.push(v),
         }
     }
-    /// Perform a substitution. This is analogous to [`apply`].
+    /// Parse a type from a string. This round-trips with [`Display`].
     ///
     /// # Examples
     ///
     /// ```
-    /// # use polytype::tp;
-    /// # use std::collections::HashMap;
-    /// let t = tp!(@arrow[tp!(0), tp!(1)]);
-    /// assert_eq!(t.to_string(), "t0 → t1");
+    /// # use polytype::{with_ctx, TypeContext, Type, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t_parse = Type::parse(&ctx, "int -> HashMap(t0, List(bool))").expect("valid type");
     ///
-    /// let mut substitution = HashMap::new();
-    /// substitution.insert(0, tp!(int));
-    /// substitution.insert(1, tp!(bool));
+    ///     let n_int = ctx.intern_name("int");
+    ///     let n_hash = ctx.intern_name("HashMap");
+    ///     let n_list = ctx.intern_name("List");
+    ///     let n_bool = ctx.intern_name("bool");
+    ///     let t_int = ctx.intern_tcon(n_int, &[]);
+    ///     let t_0 = ctx.intern_tvar(Variable(0));
+    ///     let t_bool = ctx.intern_tcon(n_bool, &[]);
+    ///     let t_list = ctx.intern_tcon(n_list, &[t_bool]);
+    ///     let t_hash = ctx.intern_tcon(n_hash, &[t_0, t_list]);
+    ///     let t_manual = ctx.arrow(t_int, t_hash);
     ///
-    /// let t = t.substitute(&substitution);
-    /// assert_eq!(t.to_string(), "int → bool");
+    ///     assert_eq!(t_parse, t_manual);
+    ///
+    ///     let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
+    ///     let t = Type::parse(&ctx, s).expect("valid type");
+    ///     let round_trip = t.to_string();
+    ///     assert_eq!(s, round_trip);
+    /// })
     /// ```
     ///
-    /// [`apply`]: #method.apply
-    pub fn substitute(&self, substitution: &HashMap<Variable, Type<N>>) -> Type<N> {
-        match *self {
-            Type::Constructed(ref name, ref args) => {
-                let args = args.iter().map(|t| t.substitute(substitution)).collect();
-                Type::Constructed(name.clone(), args)
-            }
-            Type::Variable(v) => substitution.get(&v).cloned().unwrap_or(Type::Variable(v)),
-        }
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    pub fn parse(ctx: &TypeContext<'ctx, N>, s: &str) -> Result<Ty<'ctx, N>, ParseError> {
+        parse_type(ctx, s)
     }
-    /// Like [`substitute`], but works in-place.
+    /// Unify a set of constraints.
     ///
-    /// [`substitute`]: #method.substitute
-    pub fn substitute_mut(&mut self, substitution: &HashMap<Variable, Type<N>>) {
-        match *self {
-            Type::Constructed(_, ref mut args) => {
-                for t in args {
-                    t.substitute_mut(substitution)
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, Type};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t1 = Type::parse(&ctx, "int -> t0").expect("t1");
+    ///     let t2 = Type::parse(&ctx, "t1 -> bool").expect("t2");
+    ///     let sub = Type::unify(&[(t1, t2)], &ctx).expect("sub");
+    ///
+    ///     let t1 = t1.apply(&sub);
+    ///     let t2 = t2.apply(&sub);
+    ///     assert_eq!(t1, t2);
+    ///     assert_eq!(t1.to_string(), "int → bool");
+    /// })
+    /// ```
+    ///
+    /// Unification errors leave the context unaffected. A
+    /// [`UnificationError::Mismatch`] error happens when symbols don't match:
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, Type, UnificationError};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t1 = Type::parse(&ctx, "int -> t0").expect("t1");
+    ///     let t2 = Type::parse(&ctx, "bool -> t1").expect("t2");
+    ///     let res = Type::unify(&[(t1, t2)], &ctx);
+    ///
+    ///     if let Err(UnificationError::Mismatch(left, right)) = res {
+    ///         assert_eq!(left.to_string(), "int");
+    ///         assert_eq!(right.to_string(), "bool");
+    ///     } else { unreachable!() }
+    /// })
+    /// ```
+    ///
+    /// An [`UnificationError::Occurs`] error happens when the same type
+    /// variable occurs in both types in a circular way. Ensure you
+    /// [`instantiate`][] your types properly, so type variables don't overlap
+    /// unless you mean them to.
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, Type, UnificationError, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t1 = Type::parse(&ctx, "t0").expect("t1");
+    ///     let t2 = Type::parse(&ctx, "bool -> t0").expect("t2");
+    ///     let res = Type::unify(&[(t1, t2)], &ctx);
+    ///
+    ///     if let Err(UnificationError::Occurs(v)) = res {
+    ///         assert_eq!(v, Variable(0));
+    ///     } else { unreachable!() }
+    /// })
+    /// ```
+    ///
+    /// [`UnificationError::Mismatch`]: enum.UnificationError.html#variant.Mismatch
+    /// [`UnificationError::Occurs`]: enum.UnificationError.html#variant.Occurs
+    /// [`instantiate`]: enum.Type.html#method.instantiate
+    pub fn unify(
+        cs: &[(Ty<'ctx, N>, Ty<'ctx, N>)],
+        ctx: &TypeContext<'ctx, N>,
+    ) -> Result<Substitution<'ctx, N>, UnificationError<'ctx, N>> {
+        let mut sub = Substitution::with_capacity(ctx.clone(), 32);
+        Type::unify_with_sub(cs, &mut sub).map(|_| sub)
+    }
+    /// Unify a set of constraints subject to an existing `Substitution`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{tp, with_ctx, Substitution, Type, TypeContext, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t1 = Type::parse(&ctx, "t0 -> t1").expect("t1");
+    ///     let t2 = Type::parse(&ctx, "t2 -> bool").expect("t2");
+    ///     let tint = Type::parse(&ctx, "int").expect("tint");
+    ///     let mut sub = Substitution::with_capacity(ctx, 10);
+    ///     sub.add(Variable(0), tint);
+    ///     Type::unify_with_sub(&[(t1, t2)], &mut sub).expect("success");
+    ///
+    ///     let t1 = t1.apply(&sub);
+    ///     let t2 = t2.apply(&sub);
+    ///     assert_eq!(t1, t2);
+    ///     assert_eq!(t1.to_string(), "int → bool");
+    /// })
+    /// ```
+    pub fn unify_with_sub(
+        initial_cs: &[(Ty<'ctx, N>, Ty<'ctx, N>)],
+        sub: &mut Substitution<'ctx, N>,
+    ) -> Result<(), UnificationError<'ctx, N>> {
+        let mut cs: SmallVec<[(&Type<N>, &Type<N>); 32]> = smallvec![];
+        for &(s, t) in initial_cs {
+            Type::unify_one(s, t, &mut cs, sub)?;
+        }
+        while let Some((s, t)) = cs.pop() {
+            Type::unify_one(s, t, &mut cs, sub)?;
+        }
+        Ok(())
+    }
+    /// the internal implementation of a single unification.
+    #[inline]
+    fn unify_one(
+        mut s: Ty<'ctx, N>,
+        mut t: Ty<'ctx, N>,
+        cs: &mut SmallVec<[(Ty<'ctx, N>, Ty<'ctx, N>); 32]>,
+        subs: &mut Substitution<'ctx, N>,
+    ) -> Result<(), UnificationError<'ctx, N>> {
+        s = s.apply(subs);
+        t = t.apply(subs);
+
+        // if they are equal, you're all done with them.
+        if s != t {
+            match (s, t) {
+                (Type::Variable(ref var), Type::Variable(_)) => {
+                    subs.add(*var, t);
                 }
-            }
-            Type::Variable(v) => {
-                if let Some(t) = substitution.get(&v) {
-                    *self = t.clone()
+                (Type::Variable(ref var), t) => {
+                    if t.occurs(*var) {
+                        return Err(UnificationError::Occurs(*var));
+                    } else {
+                        subs.add(*var, t);
+                    }
+                }
+                (s, Type::Variable(ref var)) => {
+                    if s.occurs(*var) {
+                        return Err(UnificationError::Occurs(*var));
+                    } else {
+                        subs.add(*var, s);
+                    }
+                }
+                (Type::Constructed(n1, a1), Type::Constructed(n2, a2)) => {
+                    if n1 != n2 {
+                        return Err(UnificationError::Mismatch(s, t));
+                    } else {
+                        for (&c1, &c2) in a1.iter().zip(a2.iter()) {
+                            cs.push((c1, c2));
+                        }
+                    }
                 }
             }
         }
+        Ok(())
     }
 }
-impl<N: Name> fmt::Display for Type<N> {
+
+impl<'ctx, N: Name> fmt::Display for Type<'ctx, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.show(true))
     }
 }
-impl<N: Name> From<VecDeque<Type<N>>> for Type<N> {
-    fn from(mut tps: VecDeque<Type<N>>) -> Type<N> {
-        match tps.len() {
-            0 => panic!("cannot create a type from nothing"),
-            1 => tps.pop_front().unwrap(),
-            2 => {
-                let alpha = tps.pop_front().unwrap();
-                let beta = tps.pop_front().unwrap();
-                Type::arrow(alpha, beta)
+
+impl<'ctx, N: Name> TypeSchema<'ctx, N> {
+    /// Checks whether a variable is bound in the quantification of a polytype.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = TypeSchema::parse(&ctx, "t0. t0 -> t1").expect("t");
+    ///     assert!(t.is_bound(Variable(0)));
+    ///     assert!(!t.is_bound(Variable(1)));
+    /// })
+    /// ```
+    pub fn is_bound(&self, v: Variable) -> bool {
+        let mut t = self;
+        while let TypeSchema::Polytype(variable, body) = t {
+            if *variable == v {
+                return true;
+            } else {
+                t = body
             }
-            _ => {
-                let alpha = tps.pop_front().unwrap();
-                Type::arrow(alpha, tps.into())
+        }
+        false
+    }
+    /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = TypeSchema::parse(&ctx, "t0. t1. t1 -> t2 -> t3").expect("t");
+    ///     assert_eq!(t.bound_vars(), vec![Variable(0), Variable(1)]);
+    /// })
+    /// ```
+    ///
+    /// [`Variable`]: type.Variable.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn bound_vars(&self) -> Vec<Variable> {
+        let mut t = self;
+        let mut bvs = Vec::with_capacity(self.depth());
+        while let TypeSchema::Polytype(variable, body) = *t {
+            bvs.push(variable);
+            t = body;
+        }
+        bvs
+    }
+    /// The number of [`Variable`]s bound by the `TypeSchema`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = TypeSchema::parse(&ctx, "t0. t1. t1 -> t2 -> t3").expect("t");
+    ///     assert_eq!(t.depth(), 2);
+    /// })
+    /// ```
+    ///
+    /// [`Variable`]: type.Variable.html
+    pub fn depth(&self) -> usize {
+        let mut t = self;
+        let mut depth = 0;
+        while let TypeSchema::Polytype(_, body) = t {
+            depth += 1;
+            t = body;
+        }
+        depth
+    }
+    /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t = TypeSchema::parse(&ctx, "t0. t1. t1 -> t2 -> t3").expect("t");
+    ///     assert_eq!(t.free_vars(), vec![Variable(2), Variable(3)]);
+    /// })
+    /// ```
+    ///
+    /// [`Variable`]: type.Variable.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn free_vars(&self) -> Vec<Variable> {
+        let mut vars = vec![];
+        self.free_vars_internal(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
+    }
+    fn free_vars_internal(&self, vars: &mut Vec<Variable>) {
+        match *self {
+            TypeSchema::Monotype(t) => t.vars_internal(vars),
+            TypeSchema::Polytype(variable, body) => {
+                body.free_vars_internal(vars);
+                *vars = vars.iter().filter(|&v| v != &variable).copied().collect();
             }
         }
     }
-}
-impl<N: Name> From<Vec<Type<N>>> for Type<N> {
-    fn from(mut tps: Vec<Type<N>>) -> Type<N> {
-        let mut beta = tps
-            .pop()
-            .unwrap_or_else(|| panic!("cannot create a type from nothing"));
-        while let Some(alpha) = tps.pop() {
-            beta = Type::arrow(alpha, beta)
+    /// Instantiate a [`TypeSchema`] in the context by removing quantifiers.
+    ///
+    /// All type variables will be replaced with fresh type variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, Source, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let mut src = Source::default();
+    ///     src.fresh(); // Throw away a type variable to match parse.
+    ///     let t = TypeSchema::parse(&ctx, "t1. t1 -> t0").expect("t");
+    ///     let t_in1 = t.instantiate(&ctx, &mut src);
+    ///     let t_in2 = t.instantiate(&ctx, &mut src);
+    ///     assert_eq!(t_in1.to_string(), "t1 → t0");
+    ///     assert_eq!(t_in2.to_string(), "t2 → t0");
+    /// })
+    /// ```
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, Source, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let mut src = Source::default();
+    ///     let t = TypeSchema::parse(&ctx, "t0. t1. (t0 -> t1) -> t0 -> t1").expect("t");
+    ///     let t_in1 = t.instantiate(&ctx, &mut src);
+    ///     let t_in2 = t.instantiate(&ctx, &mut src);
+    ///     assert_eq!(t_in1.to_string(), "(t0 → t1) → t0 → t1");
+    ///     assert_eq!(t_in2.to_string(), "(t2 → t3) → t2 → t3");
+    /// })
+    /// ```
+    ///
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn instantiate(&self, ctx: &TypeContext<'ctx, N>, src: &mut Source) -> Ty<'ctx, N> {
+        let mut sub = Substitution::with_capacity(ctx.clone(), self.depth());
+        let mut tp = self;
+        loop {
+            match tp {
+                TypeSchema::Polytype(variable, body) => {
+                    let t_var = Variable(src.fresh());
+                    let t = ctx.intern_tvar(t_var);
+                    if *variable != t_var {
+                        sub.add(*variable, t);
+                    }
+                    tp = body;
+                }
+                TypeSchema::Monotype(t) => return TypeSchema::substitute(t, &sub),
+            }
         }
-        beta
+    }
+    // A helper function used by `instantiate`.
+    fn substitute(tp: Ty<'ctx, N>, sub: &Substitution<'ctx, N>) -> Ty<'ctx, N> {
+        match *tp {
+            Type::Constructed(name, args) => {
+                let naive_args = args
+                    .iter()
+                    .map(|t| TypeSchema::substitute(t, sub))
+                    .collect_vec();
+                sub.ctx.intern_tcon(name, &naive_args)
+            }
+            // Major difference is here: we don't call substitute recursively.
+            Type::Variable(v) => sub.get(v).unwrap_or(tp),
+        }
+    }
+    /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
+    ///
+    /// The "for-all" `∀` is optional.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use polytype::{with_ctx, TypeContext, TypeSchema, Variable};
+    /// with_ctx(10, |ctx: TypeContext<'_>| {
+    ///     let t_parse = TypeSchema::parse(&ctx, "∀t0. t0 -> t0").expect("t_parse");
+    ///
+    ///     let t_0 = ctx.intern_tvar(Variable(0));
+    ///     let t_arrow = ctx.arrow(t_0, t_0);
+    ///     let t_mono = ctx.intern_monotype(t_arrow);
+    ///     let t_manual = ctx.intern_polytype(Variable(0), t_mono);
+    ///
+    ///     assert_eq!(t_parse, t_manual);
+    ///
+    ///     let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
+    ///     let t = TypeSchema::parse(&ctx, s).expect("t");
+    ///     let round_trip = t.to_string();
+    ///     assert_eq!(s, round_trip);
+    /// })
+    /// ```
+    ///
+    /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
+    /// [`TypeSchema`]: enum.TypeSchema.html
+    pub fn parse(ctx: &TypeContext<'ctx, N>, s: &str) -> Result<Schema<'ctx, N>, ParseError> {
+        parse_typeschema(ctx, s)
+    }
+}
+
+impl<'ctx, N: Name> fmt::Display for TypeSchema<'ctx, N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match *self {
+            TypeSchema::Polytype(variable, body) => write!(f, "∀t{}. {}", variable.0, body),
+            TypeSchema::Monotype(ref t) => t.fmt(f),
+        }
     }
 }

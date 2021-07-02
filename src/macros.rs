@@ -1,27 +1,16 @@
-/// Creates a [`Type`][] (convenience for common patterns).
+/// Creates a [`Ty`] (convenience for common patterns).
 ///
-/// Specifically, a `Type<&'static str>`, where all names are static strings.
+/// Specifically, a `&Type<'ctx, &'static str>`, where all names are static strings.
 ///
 /// ```rust,ignore
 /// // Equivalent to:
-/// Type::Constructed(ident, vec![
+/// &'ctx Type::Constructed(ident, vec![
 ///     tp1,
 ///     tp2,
 ///     ...
 /// ])
 /// // or
-/// Type::Variable(n)
-/// // or
-/// Type::arrow(
-///     tp0,
-///     Type::arrow(
-///         tp1,
-///         Type::arrow(
-///             tp2,
-///             ...,
-///         )
-///     )
-/// )
+/// &'ctx Type::Variable(n)
 /// ```
 ///
 /// # Examples
@@ -29,98 +18,118 @@
 /// Make a primitive type:
 ///
 /// ```
-/// # use polytype::{tp, Type};
-/// let t = tp!(int);
-/// assert_eq!(format!("{}", t), "int");
+/// # use polytype::{tp, with_ctx};
+/// # with_ctx(32, |ctx| {
+/// let t_macro = tp!(ctx, int);
+/// assert_eq!(t_macro.to_string(), "int");
 /// // Equivalent to:
-/// let t_eq = Type::Constructed("int", vec![]);
-/// assert_eq!(t, t_eq);
+/// let name = ctx.intern_name("int");
+/// let t_manual = ctx.intern_tcon(name, &[]);
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// Make a variable type:
 ///
 /// ```
-/// # use polytype::{tp, Type};
-/// let t = tp!(0);
-/// assert_eq!(format!("{}", t), "t0");
+/// # use polytype::{tp, with_ctx, Ty, Variable};
+/// # with_ctx(32, |ctx| {
+/// # ctx.intern_name("int");
+/// let t_macro = tp!(ctx, 0);
+/// assert_eq!(t_macro.to_string(), "t0");
 /// // Equivalent to:
-/// let t_eq = Type::Variable(0);
-/// assert_eq!(t, t_eq);
+/// let t_manual = ctx.intern_tvar(Variable(0));
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// Make a composite type:
 ///
 /// ```
-/// # use polytype::{tp, Type};
-/// let tint = tp!(int);
-/// let tstr = tp!(str);
-/// let t = tp!(dict(tstr, tint));
-/// assert_eq!(format!("{}", t), "dict(str,int)");
+/// # use polytype::{tp, with_ctx, Ty, Variable};
+/// # with_ctx(32, |ctx| {
+/// let t_macro = tp!(ctx, dict(tp!(ctx, str), tp!(ctx, int)));
+/// assert_eq!(t_macro.to_string(), "dict(str,int)");
 /// // Equivalent to:
-/// let t_eq = Type::Constructed("dict", vec![
-///     Type::Constructed("str", vec![]),
-///     Type::Constructed("int", vec![]),
-/// ]);
-/// assert_eq!(t, t_eq);
+/// let nint = ctx.intern_name("int");
+/// let nstr = ctx.intern_name("str");
+/// let ndict = ctx.intern_name("dict");
+/// let tint_manual = ctx.intern_tcon(nint, &[]);
+/// let tstr_manual = ctx.intern_tcon(nstr, &[]);
+/// let t_manual = ctx.intern_tcon(ndict, &[tstr_manual, tint_manual]);
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// Make an arrow:
 ///
 /// ```
-/// # use polytype::{tp, Type};
-/// let t = tp!(@arrow[Type::Variable(0), Type::Variable(1), Type::Variable(2)]);
-/// assert_eq!(format!("{}", t), "t0 → t1 → t2");
+/// # use polytype::{tp, with_ctx, Ty, Variable};
+/// # with_ctx(32, |ctx| {
+/// # ctx.intern_name("int");
+/// let t_macro = tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, 1), tp!(ctx, 2)]);
+/// assert_eq!(t_macro.to_string(), "t0 → t1 → t2");
 /// // Equivalent to:
-/// let t_eq = Type::arrow(
-///     Type::Variable(0),
-///     Type::arrow(
-///         Type::Variable(1),
-///         Type::Variable(2),
-///     )
-/// );
-/// assert_eq!(t, t_eq);
+/// let t_0 = ctx.intern_tvar(Variable(0));
+/// let t_1 = ctx.intern_tvar(Variable(1));
+/// let t_2 = ctx.intern_tvar(Variable(2));
+/// let t_manual = ctx.arrow_slice(&[t_0, t_1, t_2]);
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// Nest them for more complex types:
 ///
 /// ```
-/// # use polytype::{tp, Type};
+/// # use polytype::{tp, with_ctx, Ty, Variable};
+/// # with_ctx(32, |ctx| {
 /// // mapi: (int → α → β) → [α] → [β]
-/// let t = tp!(@arrow[
-///     tp!(@arrow[tp!(int), tp!(0), tp!(1)]),
-///     tp!(list(tp!(0))),
-///     tp!(list(tp!(1))),
+/// let t = tp!(ctx, @arrow[
+///     tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, 0), tp!(ctx, 1)]),
+///     tp!(ctx, list(tp!(ctx, 0))),
+///     tp!(ctx, list(tp!(ctx, 1))),
 /// ]);
-/// assert_eq!(format!("{}", t), "(int → t0 → t1) → list(t0) → list(t1)");
+/// assert_eq!(t.to_string(), "(int → t0 → t1) → list(t0) → list(t1)");
+/// # })
 /// ```
 ///
-/// [`Type`]: enum.Type.html
+/// [`Ty`]: type.Ty.html
 #[macro_export]
 macro_rules! tp {
-    ($n:ident) => ($crate::Type::Constructed(stringify!($n), Vec::new()));
-    ($n:ident($($x:expr),*)) => {
-        $crate::Type::Constructed(stringify!($n), vec![$($x),*])
+    // name of context and name of type.
+    ($ctx:ident, $n:ident) => {
+        $ctx.intern_tcon($ctx.intern_name(stringify!($n)), &[])
     };
-    ($n:ident($($x:expr,)*)) => ($crate::tp!($n($($x),*)));
-    ($n:expr) => ($crate::Type::Variable($n) as $crate::Type<&'static str>);
-    (@arrow[$x:expr]) => ($x as $crate::Type<&'static str>);
-    (@arrow[$x:expr, $($xs:expr),*]) => (
-        match ($x, $crate::tp!(@arrow[$($xs),+])) {
-            (arg, ret) => $crate::Type::arrow(arg, ret)
+    // name of context, name of head, a comma-separated list of expressions
+    ($ctx:ident, $n:ident($($x:expr),*)) => {
+        $ctx.intern_tcon($ctx.intern_name(stringify!($n)), &[$($x),*])
+    };
+    // name of context, name of head,
+    // TODO: is this necessary?
+    ($ctx:ident, $n:ident($($x:expr,)*)) => ($crate::tp!($ctx, $n($($x),*)));
+    // name of context, numerical value that is a variable value.
+    ($ctx:ident, $n:expr) => ($ctx.intern_tvar($crate::Variable($n)));
+    // Not sure why this is here...shouldn't be a valid type.
+    // TODO: revise this to make sure arrows always have two?
+    ($ctx:ident, @arrow[$x:expr]) => ($x);
+    ($ctx:ident, @arrow[$x:expr, $($xs:expr),*]) => (
+        match ($x, $crate::tp!($ctx, @arrow[$($xs),+])) {
+            (arg, ret) => $ctx.arrow(arg, ret)
         }
     );
-    (@arrow[$x:expr, $($xs:expr,)*]) => ($crate::tp!(@arrow[$x, $($xs),*]))
+    // another rule matching
+    ($ctx:ident, @arrow[$x:expr, $($xs:expr,)*]) => ($crate::tp!($ctx, @arrow[$x, $($xs),*]))
 }
 
-/// Creates a [`TypeSchema`][] (convenience for common patterns).
+/// Creates a [`Schema`] (convenience for common patterns).
 ///
-/// Specifically, a `TypeSchema<&'static str>`, where all names are static strings.
+/// Specifically, a `&Schema<'ctx, &'static str>`, where all names are static strings.
 ///
 /// ```rust,ignore
 /// // Equivalent to:
-/// TypeSchema::Monotype(tp)
+/// &'ctx TypeSchema::Monotype(tp)
 /// // Or
-/// TypeSchema::Polytype {
+/// &'ctx TypeSchema::Polytype {
 ///     variable1,
 ///     body: Box::new(TypeSchema::Polytype {
 ///         variable2,
@@ -129,27 +138,29 @@ macro_rules! tp {
 /// }
 /// ```
 ///
-/// This behaves much like [`tp!`], but this gives a [`TypeSchema`] and you can
+/// This behaves much like [`tp!`], but this gives a [`Schema`] and you can
 /// express quantified type variables in a prefixed comma-delimited list. There
 /// are three usage patterns, shown in the examples below.
 ///
 /// # Examples
 ///
 /// If you don't want to do any quantification, using `ptp!` on its own is just
-/// like wrapping [`tp!`] with a [`TypeSchema::Monotype`]:
+/// like wrapping a [`Type`] with a [`TypeSchema::Monotype`]:
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
-/// let t = ptp!(dict(tp!(str), tp!(int)));
-/// assert_eq!(format!("{}", t), "dict(str,int)");
+/// # use polytype::{tp, ptp, with_ctx};
+/// # with_ctx(32, |ctx| {
+/// let t_macro = ptp!(ctx, dict(tp!(ctx, str), tp!(ctx, int)));
+/// assert_eq!(t_macro.to_string(), "dict(str,int)");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Monotype(
-///     Type::Constructed("dict", vec![
-///         Type::Constructed("str", vec![]),
-///         Type::Constructed("int", vec![]),
-///     ])
-/// );
-/// assert_eq!(t, t_eq);
+/// let nint = ctx.intern_name("int");
+/// let nstr = ctx.intern_name("str");
+/// let ndict = ctx.intern_name("dict");
+/// let tint_manual = ctx.intern_tcon(nint, &[]);
+/// let tstr_manual = ctx.intern_tcon(nstr, &[]);
+/// let t_manual = ctx.intern_monotype(ctx.intern_tcon(ndict, &[tstr_manual, tint_manual]));
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// If you want to do quantification over a known monotype, precede the type
@@ -157,73 +168,66 @@ macro_rules! tp {
 /// subsequent monotype is treated like the [`tp!`] macro):
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
-/// let t = ptp!(0, 1; @arrow[tp!(0), tp!(1), tp!(0)]);
-/// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
+/// # use polytype::{tp, ptp, Variable, with_ctx};
+/// # with_ctx(32, |ctx| {
+/// # ctx.intern_name("int");
+/// let t_macro = ptp!(ctx, 0, 1; @arrow[tp!(ctx, 0), tp!(ctx, 1), tp!(ctx, 0)]);
+/// assert_eq!(t_macro.to_string(), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Polytype {
-///     variable: 0,
-///     body: Box::new(TypeSchema::Polytype {
-///         variable: 1,
-///         body: Box::new(TypeSchema::Monotype(
-///             Type::arrow(
-///                 Type::Variable(0),
-///                 Type::arrow(
-///                     Type::Variable(1),
-///                     Type::Variable(0),
-///                 )
-///             )
-///         ))
-///     })
-/// };
-/// assert_eq!(t, t_eq);
+/// let t_0 = ctx.intern_tvar(Variable(0));
+/// let t_1 = ctx.intern_tvar(Variable(1));
+/// let t_arrow = ctx.arrow_slice(&[t_0, t_1, t_0]);
+/// let t_manual = ctx.intern_polytype(
+///     Variable(0),
+///     ctx.intern_polytype(
+///         Variable(1),
+///         ctx.intern_monotype(t_arrow),
+///     )
+/// );
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
 /// If you want want do quantification over an existing [`TypeSchema`], use a
 /// comma after the quantified variables:
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
-/// let inner = tp!(@arrow[tp!(0), tp!(1), tp!(0)]);
-/// let t = ptp!(0, 1, TypeSchema::Monotype(inner.clone()));
-/// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
+/// # use polytype::{tp, ptp, Variable, with_ctx};
+/// # with_ctx(32, |ctx| {
+/// # ctx.intern_name("int");
+/// let inner = ptp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, 1), tp!(ctx, 0)]);
+/// let t_macro = ptp!(ctx, 0, 1, inner);
+/// assert_eq!(t_macro.to_string(), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Polytype {
-///     variable: 0,
-///     body: Box::new(TypeSchema::Polytype {
-///         variable: 1,
-///         body: Box::new(TypeSchema::Monotype(inner))
-///     })
-/// };
-/// assert_eq!(t, t_eq);
+/// let t_manual = ctx.intern_polytype(
+///     Variable(0),
+///     ctx.intern_polytype(
+///         Variable(1),
+///         inner,
+///     )
+/// );
+/// assert_eq!(t_macro, t_manual);
+/// # })
 /// ```
 ///
+/// [`TypeSchema`]: enum.TypeSchema.html
 /// [`TypeSchema::Polytype`]: enum.TypeSchema.html#variant.Polytype
 /// [`TypeSchema::Monotype`]: enum.TypeSchema.html#variant.Monotype
-/// [`TypeSchema`]: enum.TypeSchema.html
+/// [`Schema`]: type.Schema.html
 /// [`Type`]: enum.Type.html
 /// [`tp!`]: macro.tp.html
 #[macro_export]
 macro_rules! ptp {
-    ($n:expr; $($t:tt)+) => {
-        $crate::TypeSchema::Polytype {
-            variable: $n,
-            body: Box::new($crate::TypeSchema::Monotype($crate::tp!($($t)+))),
-        }
+    ($ctx:ident, $n:expr; $($t:tt)+) => {
+        $ctx.intern_polytype($crate::Variable($n), $crate::ptp!($ctx, $($t)+))
     };
-    ($n:expr, $body:expr) => {
-        $crate::TypeSchema::Polytype {
-            variable: $n,
-            body: Box::new($body),
-        }
+    ($ctx:ident, $n:expr, $body:expr) => {
+        $ctx.intern_polytype($crate::Variable($n), $body)
     };
-    ($n:expr, $($t:tt)+) => {
-        $crate::TypeSchema::Polytype {
-            variable: $n,
-            body: Box::new($crate::ptp!($($t)+)),
-        }
+    ($ctx:ident, $n:expr, $($t:tt)+) => {
+        $ctx.intern_polytype($crate::Variable($n), $crate::ptp!($ctx, $($t)+))
     };
-    ($($t:tt)+) => {
-        $crate::TypeSchema::Monotype($crate::tp!($($t)+))
+    ($ctx:ident, $($t:tt)+) => {
+        $ctx.intern_monotype($crate::tp!($ctx, $($t)+))
     };
 }
