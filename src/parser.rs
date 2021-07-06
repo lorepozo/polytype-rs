@@ -12,16 +12,28 @@ use std::num::ParseIntError;
 
 use crate::{Name, Type, TypeSchema};
 
-pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ()> {
-    match Parser::default().monotype(CompleteStr(input)).1 {
-        Ok((_, t)) => Ok(t),
-        _ => Err(()),
+#[derive(Debug)]
+/// A failed parse.
+pub struct ParseError;
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ParseError")
     }
 }
-pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ()> {
+
+impl std::error::Error for ParseError {}
+
+pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ParseError> {
+    match Parser::default().monotype(CompleteStr(input)).1 {
+        Ok((_, t)) => Ok(t),
+        _ => Err(ParseError),
+    }
+}
+pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ParseError> {
     match Parser::default().polytype(CompleteStr(input)).1 {
         Ok((_, t)) => Ok(t),
-        _ => Err(()),
+        _ => Err(ParseError),
     }
 }
 
@@ -52,50 +64,50 @@ impl<N: Name> Parser<N> {
         )
     );
     method!(constructed_complex<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-               do_parse!(
-                   name_raw: alpha >>
-                   name: expr_res!(N::parse(&name_raw)) >>
-                   tag!("(") >>
-                   args: separated_list!(tag!(","), ws!(call_m!(self.monotype))) >>
-                   tag!(")") >>
-                   (Type::Constructed(name, args)))
-        );
+           do_parse!(
+               name_raw: alpha >>
+               name: expr_res!(N::parse(&name_raw)) >>
+               tag!("(") >>
+               args: separated_list!(tag!(","), ws!(call_m!(self.monotype))) >>
+               tag!(")") >>
+               (Type::Constructed(name, args)))
+    );
     method!(arrow<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-               do_parse!(
-                   alpha: ws!(alt!(call_m!(self.parenthetical) |
-                                   call_m!(self.var) |
-                                   call_m!(self.constructed_complex) |
-                                   call_m!(self.constructed_simple))) >>
-                   alt!(tag!("→") | tag!("->")) >>
-                   beta: ws!(call_m!(self.monotype)) >>
-                   (Type::arrow(alpha, beta)))
-        );
+           do_parse!(
+               alpha: ws!(alt!(call_m!(self.parenthetical) |
+                               call_m!(self.var) |
+                               call_m!(self.constructed_complex) |
+                               call_m!(self.constructed_simple))) >>
+               alt!(tag!("→") | tag!("->")) >>
+               beta: ws!(call_m!(self.monotype)) >>
+               (Type::arrow(alpha, beta)))
+    );
     method!(parenthetical<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-               do_parse!(
-                   tag!("(") >>
-                   interior: call_m!(self.arrow) >>
-                   tag!(")") >>
-                   (interior))
-        );
+           do_parse!(
+               tag!("(") >>
+               interior: call_m!(self.arrow) >>
+               tag!(")") >>
+               (interior))
+    );
     method!(binding<Parser<N>, CompleteStr<'_>, TypeSchema<N>>, mut self,
-               do_parse!(
-                   opt!(tag!("∀")) >>
-                   tag!("t") >>
-                   variable: map_res!(digit, nom_usize) >>
-                   ws!(tag!(".")) >>
-                   body: map!(call_m!(self.polytype), Box::new) >>
-                   (TypeSchema::Polytype{variable, body}))
-        );
+           do_parse!(
+               opt!(tag!("∀")) >>
+               tag!("t") >>
+               variable: map_res!(digit, nom_usize) >>
+               ws!(tag!(".")) >>
+               body: map!(call_m!(self.polytype), Box::new) >>
+               (TypeSchema::Polytype{variable, body}))
+    );
     method!(monotype<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-               alt!(call_m!(self.arrow) |
-                    call_m!(self.var) |
-                    call_m!(self.constructed_complex) |
-                    call_m!(self.constructed_simple))
-        );
+           alt!(call_m!(self.arrow) |
+                call_m!(self.var) |
+                call_m!(self.constructed_complex) |
+                call_m!(self.constructed_simple))
+    );
     method!(polytype<Parser<N>, CompleteStr<'_>, TypeSchema<N>>, mut self,
-            alt!(call_m!(self.binding) |
-                 map!(call_m!(self.monotype), TypeSchema::Monotype))
-        );
+        alt!(call_m!(self.binding) |
+             map!(call_m!(self.monotype), TypeSchema::Monotype))
+    );
 }
 impl<N: Name> TypeSchema<N> {
     /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
@@ -120,7 +132,7 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn parse(s: &str) -> Result<TypeSchema<N>, ()> {
+    pub fn parse(s: &str) -> Result<TypeSchema<N>, ParseError> {
         parse_typeschema(s)
     }
 }
@@ -150,7 +162,7 @@ impl<N: Name> Type<N> {
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
-    pub fn parse(s: &str) -> Result<Type<N>, ()> {
+    pub fn parse(s: &str) -> Result<Type<N>, ParseError> {
         parse_type(s)
     }
 }

@@ -1,6 +1,6 @@
 use crate::{Name, Type, TypeSchema, Variable};
 use indexmap::IndexMap;
-use std::{error, fmt};
+use std::{cell::RefCell, collections::HashMap, error, fmt};
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,13 +36,42 @@ impl<N: Name + fmt::Debug> error::Error for UnificationError<N> {
 /// [`Type`]: enum.Type.html
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Context<N: Name = &'static str> {
+    /// A set of constraints mapping from [`Variable`]s to [`Type`]s.
+    ///
+    /// [`Type`]: enum.Type.html
+    /// [`Variable`]: type.Variable.html
     pub(crate) substitution: IndexMap<Variable, Type<N>>,
+    /// Some operations on [`Type`]s, notably [`apply`] and [`apply_mut`]
+    /// perform path compression as they operate. Path compression is a
+    /// technique commonly used in [Union-Find data structures]. We apply it
+    /// here so that whenever a chain of substitutions is traversed, each
+    /// variable is updated to point to its ultimate value. For example, the
+    /// chain:
+    ///
+    /// `t0 ↦ t1`, `t1 ↦ t2`, and `t2 ↦ int`
+    ///
+    /// becomes
+    ///
+    /// `t0 ↦ int`, `t1 ↦ int`, and `t2 ↦ int`
+    ///
+    /// Rather than updating the actual mappings, `Context` maintains this cache
+    /// of compressed mappings.
+    ///
+    /// [Union-Find data structure]: https://en.wikipedia.org/wiki/Disjoint-set_data_structure
+    /// [`Type`]: enum.Type.html
+    /// [`apply`]: enum.Type.html#method.apply
+    /// [`apply_mut`]: enum.Type.html#method.apply_mut
+    pub(crate) path_compression_cache: RefCell<HashMap<Variable, Type<N>>>,
+    /// A counter used to generate fresh [`Variable`]s
+    ///
+    /// [`Variable`]: type.Variable.html
     next: Variable,
 }
 impl<N: Name> Default for Context<N> {
     fn default() -> Self {
         Context {
             substitution: IndexMap::new(),
+            path_compression_cache: RefCell::new(HashMap::new()),
             next: 0,
         }
     }
@@ -85,12 +114,14 @@ impl<N: Name> Context<N> {
     /// }
     /// ```
     pub fn clean(&mut self) {
-        self.substitution = IndexMap::new();
+        self.substitution.clear();
+        self.path_compression_cache.get_mut().clear();
     }
     /// Removes previous substitutions added to the `Context` until there are only `n` remaining.
     pub fn rollback(&mut self, n: usize) {
+        self.path_compression_cache.get_mut().clear();
         if n == 0 {
-            self.clean()
+            self.substitution.clear();
         } else {
             while n < self.substitution.len() {
                 self.substitution.pop();
@@ -228,7 +259,7 @@ impl<N: Name> Context<N> {
                 if t2.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
-                    self.extend(v, t2.clone());
+                    self.extend(v, t2);
                     Ok(())
                 }
             }
@@ -236,7 +267,7 @@ impl<N: Name> Context<N> {
                 if t1.occurs(v) {
                     Err(UnificationError::Occurs(v))
                 } else {
-                    self.extend(v, t1.clone());
+                    self.extend(v, t1);
                     Ok(())
                 }
             }

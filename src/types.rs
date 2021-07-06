@@ -86,7 +86,7 @@ impl<N: Name> TypeSchema<N> {
     pub fn free_vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.free_vars_internal(&mut vars);
-        vars.sort();
+        vars.sort_unstable();
         vars.dedup();
         vars
     }
@@ -350,6 +350,27 @@ impl<N: Name> Type<N> {
             _ => None,
         }
     }
+    /// If the type is an arrow, recursively get all curried function arguments.
+    pub fn args_destruct(self) -> Option<Vec<Type<N>>> {
+        match self {
+            Type::Constructed(n, mut args) if n.is_arrow() => {
+                let mut tps = Vec::with_capacity(1);
+                let mut tp = args.pop().unwrap();
+                tps.push(args.pop().unwrap());
+                loop {
+                    match tp {
+                        Type::Constructed(n, mut args) if n.is_arrow() => {
+                            tp = args.pop().unwrap();
+                            tps.push(args.pop().unwrap());
+                        }
+                        _ => break,
+                    }
+                }
+                Some(tps)
+            }
+            _ => None,
+        }
+    }
     /// If the type is an arrow, get its ultimate return type.
     ///
     /// # Examples
@@ -403,16 +424,30 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.apply(ctx)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => ctx
-                .substitution
-                .get(&v)
-                .map(|tp| tp.apply(ctx))
-                .unwrap_or_else(|| Type::Variable(v)),
+            Type::Variable(v) => {
+                let maybe_tp = ctx
+                    .path_compression_cache
+                    .borrow()
+                    .get(&v)
+                    .or_else(|| ctx.substitution.get(&v))
+                    .cloned();
+                maybe_tp
+                    .map(|mut tp| {
+                        tp.apply_mut(ctx);
+                        if ctx.path_compression_cache.borrow().get(&v) != Some(&tp) {
+                            ctx.path_compression_cache
+                                .borrow_mut()
+                                .insert(v, tp.clone());
+                        }
+                        tp
+                    })
+                    .unwrap_or_else(|| self.clone())
+            }
         }
     }
-    /// Like [`apply`], but works in-place.
+    /// Like [`apply_compress`], but works in-place.
     ///
-    /// [`apply`]: #method.apply
+    /// [`apply_compress`]: #method.apply_compress
     pub fn apply_mut(&mut self, ctx: &Context<N>) {
         match *self {
             Type::Constructed(_, ref mut args) => {
@@ -421,11 +456,21 @@ impl<N: Name> Type<N> {
                 }
             }
             Type::Variable(v) => {
-                *self = ctx
-                    .substitution
+                let maybe_tp = ctx
+                    .path_compression_cache
+                    .borrow()
                     .get(&v)
-                    .map(|tp| tp.apply(ctx))
-                    .unwrap_or_else(|| Type::Variable(v));
+                    .or_else(|| ctx.substitution.get(&v))
+                    .cloned();
+                *self = maybe_tp
+                    .map(|mut tp| {
+                        tp.apply_mut(ctx);
+                        ctx.path_compression_cache
+                            .borrow_mut()
+                            .insert(v, tp.clone());
+                        tp
+                    })
+                    .unwrap_or_else(|| self.clone());
             }
         }
     }
@@ -482,7 +527,7 @@ impl<N: Name> Type<N> {
     pub fn vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.vars_internal(&mut vars);
-        vars.sort();
+        vars.sort_unstable();
         vars.dedup();
         vars
     }
@@ -521,10 +566,7 @@ impl<N: Name> Type<N> {
                 let args = args.iter().map(|t| t.substitute(substitution)).collect();
                 Type::Constructed(name.clone(), args)
             }
-            Type::Variable(v) => substitution
-                .get(&v)
-                .cloned()
-                .unwrap_or_else(|| Type::Variable(v)),
+            Type::Variable(v) => substitution.get(&v).cloned().unwrap_or(Type::Variable(v)),
         }
     }
     /// Like [`substitute`], but works in-place.
