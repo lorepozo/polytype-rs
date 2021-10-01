@@ -1,370 +1,369 @@
-use std::collections::VecDeque;
-
 use polytype::*;
 
 #[test]
 fn test_tp_macro() {
-    assert_eq!(tp!(bool), Type::Constructed("bool", vec![]));
-    assert_eq!(
-        tp!(list(tp!(bool))),
-        Type::Constructed("list", vec![Type::Constructed("bool", vec![])]),
-    );
-    assert_eq!(
-        tp!(list(tp!(tuple(tp!(bool), tp!(int))))),
-        Type::Constructed(
-            "list",
-            vec![Type::Constructed(
-                "tuple",
-                vec![
-                    Type::Constructed("bool", vec![]),
-                    Type::Constructed("int", vec![]),
-                ],
-            )],
-        ),
-    );
-    assert_eq!(
-        tp!(list(
-            tp!(unusually_large_identifier_requiring_wrap),
-            tp!(unusually_large_identifier_requiring_wrap),
-        )),
-        Type::Constructed(
-            "list",
-            vec![
-                Type::Constructed("unusually_large_identifier_requiring_wrap", vec![]),
-                Type::Constructed("unusually_large_identifier_requiring_wrap", vec![]),
-            ],
-        ),
-    );
-    assert_eq!(tp!(0), Type::Variable(0));
-    assert_eq!(
-        tp!(hashmap(tp!(str), tp!(@arrow[tp!(int), tp!(0), tp!(bool)]))),
-        Type::Constructed(
-            "hashmap",
-            vec![
-                Type::Constructed("str", vec![]),
-                Type::arrow(
-                    Type::Constructed("int", vec![]),
-                    Type::arrow(Type::Variable(0), Type::Constructed("bool", vec![])),
-                ),
-            ],
-        )
-    );
-    // arrows
-    assert_eq!(tp!(@arrow[Type::Variable(0)]), Type::Variable(0));
-    let arg = Type::Variable(0);
-    let ret = Type::Variable(1);
-    let t = tp!(@arrow[arg, ret]);
-    assert_eq!(t, tp!(@arrow[Type::Variable(0), Type::Variable(1)]));
-    assert_eq!(
-        tp!(@arrow[Type::Variable(0), Type::Variable(1), Type::Variable(2)]),
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(Type::Variable(1), Type::Variable(2)),
-        )
-    );
-    assert_eq!(
-        tp!(@arrow[
-            Type::Variable(0),
-            Type::Variable(1),
-            Type::Variable(2),
-            Type::Variable(3),
-        ]),
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(
-                Type::Variable(1),
-                Type::arrow(Type::Variable(2), Type::Variable(3)),
+    with_ctx(1024, |ctx: TypeContext<'_>| {
+        assert_eq!(tp!(ctx, bool), &Type::Constructed(&"bool", &[]));
+        assert_eq!(
+            tp!(ctx, list(tp!(ctx, bool))),
+            &Type::Constructed(&"list", &[&Type::Constructed(&"bool", &[])]),
+        );
+        assert_eq!(
+            tp!(ctx, list(tp!(ctx, tuple(tp!(ctx, bool), tp!(ctx, int))))),
+            &Type::Constructed(
+                &"list",
+                &[&Type::Constructed(
+                    &"tuple",
+                    &[
+                        &Type::Constructed(&"bool", &[]),
+                        &Type::Constructed(&"int", &[]),
+                    ],
+                )],
             ),
-        )
-    );
+        );
+        assert_eq!(
+            tp!(
+                ctx,
+                list(
+                    tp!(ctx, unusually_large_identifier_requiring_wrap),
+                    tp!(ctx, unusually_large_identifier_requiring_wrap),
+                )
+            ),
+            &Type::Constructed(
+                &"list",
+                &[
+                    &Type::Constructed(&"unusually_large_identifier_requiring_wrap", &[]),
+                    &Type::Constructed(&"unusually_large_identifier_requiring_wrap", &[]),
+                ],
+            ),
+        );
+        assert_eq!(tp!(ctx, 0), &Type::Variable(Variable(0)));
+        assert_eq!(
+            tp!(
+                ctx,
+                hashmap(
+                    tp!(ctx, str),
+                    tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, 0), tp!(ctx, bool)])
+                )
+            ),
+            &Type::Constructed(
+                &"hashmap",
+                &[
+                    &Type::Constructed(&"str", &[]),
+                    ctx.arrow(
+                        &Type::Constructed(&"int", &[]),
+                        ctx.arrow(
+                            &Type::Variable(Variable(0)),
+                            &Type::Constructed(&"bool", &[])
+                        ),
+                    ),
+                ],
+            )
+        );
+        // arrows
+        assert_eq!(tp!(ctx, @arrow[tp!(ctx, 0)]), &Type::Variable(Variable(0)));
+        let arg = &Type::Variable(Variable(0));
+        let ret = &Type::Variable(Variable(1));
+        let t = tp!(ctx, @arrow[arg, ret]);
+        assert_eq!(
+            t,
+            tp!(ctx, @arrow[&Type::Variable(Variable(0)), &Type::Variable(Variable(1))])
+        );
+        assert_eq!(
+            tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, 1), tp!(ctx, 2)]),
+            ctx.arrow(
+                &Type::Variable(Variable(0)),
+                ctx.arrow(&Type::Variable(Variable(1)), &Type::Variable(Variable(2))),
+            )
+        );
+        assert_eq!(
+            tp!(ctx, @arrow[
+                tp!(ctx, 0),
+                tp!(ctx, 1),
+                tp!(ctx, 2),
+                tp!(ctx, 3),
+            ]),
+            ctx.arrow(
+                &Type::Variable(Variable(0)),
+                ctx.arrow(
+                    &Type::Variable(Variable(1)),
+                    ctx.arrow(&Type::Variable(Variable(2)), &Type::Variable(Variable(3))),
+                ),
+            )
+        );
+    })
 }
 
 #[test]
 fn test_ptp_macro() {
-    assert_eq!(
-        ptp!(bool),
-        TypeSchema::Monotype(Type::Constructed("bool", vec![]))
-    );
-    assert_eq!(
-        ptp!(list(tp!(bool))),
-        TypeSchema::Monotype(Type::Constructed(
-            "list",
-            vec![Type::Constructed("bool", vec![])],
-        ))
-    );
-    assert_eq!(
-        ptp!(0; 0),
-        TypeSchema::Polytype {
-            variable: 0,
-            body: Box::new(TypeSchema::Monotype(Type::Variable(0))),
-        }
-    );
-    assert_eq!(
-        ptp!(0; @arrow[tp!(0), tp!(0)]),
-        TypeSchema::Polytype {
-            variable: 0,
-            body: Box::new(TypeSchema::Monotype(Type::Constructed(
-                "→",
-                vec![Type::Variable(0), Type::Variable(0)],
-            ))),
-        }
-    );
+    with_ctx(1024, |ctx| {
+        assert_eq!(
+            ptp!(ctx, bool),
+            &TypeSchema::Monotype(&Type::Constructed(&"bool", &[]))
+        );
+        assert_eq!(
+            ptp!(ctx, list(tp!(ctx, bool))),
+            &TypeSchema::Monotype(&Type::Constructed(
+                &"list",
+                &[&Type::Constructed(&"bool", &[])],
+            ))
+        );
+        assert_eq!(
+            ptp!(ctx, 0; 0),
+            &TypeSchema::Polytype(
+                Variable(0),
+                &TypeSchema::Monotype(&Type::Variable(Variable(0))),
+            )
+        );
+        assert_eq!(
+            ptp!(ctx, 0; @arrow[tp!(ctx, 0), tp!(ctx, 0)]),
+            &TypeSchema::Polytype(
+                Variable(0),
+                &TypeSchema::Monotype(&Type::Constructed(
+                    &"→",
+                    &[&Type::Variable(Variable(0)), &Type::Variable(Variable(0))],
+                )),
+            )
+        );
+    })
 }
 
 #[test]
 fn test_arrow_methods() {
-    let t0 = Type::Variable(0);
-    let t1 = Type::Constructed("int", vec![]);
-    let t2 = Type::arrow(t0.clone(), t1.clone());
-    let ta1 = Type::arrow(t2.clone(), Type::arrow(t1.clone(), t0.clone()));
-    let ta2 = tp!(@arrow[t2.clone(), t1.clone(), t0.clone()]);
-    let ta3 = tp!(@arrow[tp!(@arrow[tp!(0), tp!(int)]), tp!(int), tp!(0)]);
-    assert_eq!(ta3, ta1);
-    assert_eq!(ta3, ta2);
-    let t = tp!(@arrow[tp!(@arrow[tp!(0), tp!(int)]), tp!(int), tp!(0)]);
-    assert_eq!(
-        t.args(),
-        Some(VecDeque::from(vec![
-            &tp!(@arrow[tp!(0), tp!(int)]),
-            &tp!(int),
-        ])),
-    );
-    assert_eq!(t.returns(), Some(&tp!(0)));
-}
-
-#[test]
-fn test_tp_from_vecdeque() {
-    let mut tps = VecDeque::new();
-    tps.push_back(Type::Variable(0));
-    let tp: Type = tps.clone().into();
-    assert_eq!(tp, Type::Variable(0));
-
-    tps.push_back(Type::Variable(1));
-    let tp: Type = tps.clone().into();
-    assert_eq!(tp, Type::arrow(Type::Variable(0), Type::Variable(1)));
-
-    tps.push_back(Type::Variable(2));
-    let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(Type::Variable(1), Type::Variable(2))
-        )
-    );
-    tps.push_back(Type::Variable(3));
-    let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(
-                Type::Variable(1),
-                Type::arrow(Type::Variable(2), Type::Variable(3))
-            )
-        )
-    );
-}
-
-#[test]
-fn test_tp_from_vec() {
-    let mut tps = Vec::new();
-    tps.push(Type::Variable(0));
-    let tp: Type = tps.clone().into();
-    assert_eq!(tp, Type::Variable(0));
-
-    tps.push(Type::Variable(1));
-    let tp: Type = tps.clone().into();
-    assert_eq!(tp, Type::arrow(Type::Variable(0), Type::Variable(1)));
-
-    tps.push(Type::Variable(2));
-    let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(Type::Variable(1), Type::Variable(2))
-        )
-    );
-    tps.push(Type::Variable(3));
-    let tp: Type = tps.clone().into();
-    assert_eq!(
-        tp,
-        Type::arrow(
-            Type::Variable(0),
-            Type::arrow(
-                Type::Variable(1),
-                Type::arrow(Type::Variable(2), Type::Variable(3))
-            )
-        )
-    );
+    with_ctx(1024, |ctx| {
+        let t0 = &Type::Variable(Variable(0));
+        let t1 = &Type::Constructed(&"int", &[]);
+        let t2 = ctx.arrow(t0, t1);
+        let ta1 = ctx.arrow(t2, ctx.arrow(t1, t0));
+        let ta2 = tp!(ctx, @arrow[t2, t1, t0]);
+        let ta3 = tp!(ctx, @arrow[tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, int)]), tp!(ctx, int), tp!(ctx, 0)]);
+        assert_eq!(ta3, ta1);
+        assert_eq!(ta3, ta2);
+        let t = tp!(ctx, @arrow[tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, int)]), tp!(ctx, int), tp!(ctx, 0)]);
+        assert_eq!(
+            t.args(),
+            Some(Vec::from(vec![
+                tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, int)]),
+                tp!(ctx, int),
+            ])),
+        );
+        assert_eq!(t.returns(), Some(tp!(ctx, 0)));
+    })
 }
 
 #[test]
 fn test_unify_one_side_polymorphic() {
-    let mut ctx = Context::default();
-    ctx.unify(
-        &tp!(list(tp!(@arrow[tp!(int), tp!(bool)]))),
-        &tp!(list(tp!(0))),
-    )
-    .expect("one side polymorphic");
+    with_ctx(1024, |ctx| {
+        Type::unify(
+            &[(
+                tp!(ctx, list(tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, bool)]))),
+                tp!(ctx, list(tp!(ctx, 0))),
+            )],
+            &ctx,
+        )
+        .expect("one side polymorphic");
+    })
 }
 
 #[test]
 fn test_unify_one_side_polymorphic_fail() {
-    let mut ctx = Context::default();
-    ctx.unify(&tp!(@arrow[tp!(int), tp!(bool)]), &tp!(list(tp!(0))))
+    with_ctx(1024, |ctx| {
+        Type::unify(
+            &[(
+                tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, bool)]),
+                tp!(ctx, list(tp!(ctx, 0))),
+            )],
+            &ctx,
+        )
         .expect_err("incompatible types");
+    })
 }
 
 #[test]
 fn test_unify_both_sides_polymorphic() {
-    let mut ctx = Context::default();
-    ctx.unify(
-        &tp!(list(tp!(@arrow[tp!(int), tp!(0)]))),
-        &tp!(list(tp!(@arrow[tp!(1), tp!(bool)]))),
-    )
-    .expect("both sides polymorphic");
+    with_ctx(1024, |ctx| {
+        Type::unify(
+            &[(
+                tp!(ctx, list(tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, 0)]))),
+                tp!(ctx, list(tp!(ctx, @arrow[tp!(ctx, 1), tp!(ctx, bool)]))),
+            )],
+            &ctx,
+        )
+        .expect("both sides polymorphic");
+    })
 }
 
 #[test]
 fn test_unify_both_sides_polymorphic_occurs() {
-    let mut ctx = Context::default();
-    ctx.unify(&tp!(0), &tp!(list(tp!(@arrow[tp!(0), tp!(bool)]))))
+    with_ctx(1024, |ctx| {
+        Type::unify(
+            &[(
+                tp!(ctx, 0),
+                tp!(ctx, list(tp!(ctx, @arrow[tp!(ctx, 0), tp!(ctx, bool)]))),
+            )],
+            &ctx,
+        )
         .expect_err("circular polymorphic types");
+    })
 }
 
 #[test]
 fn test_unify_nonstring_name() {
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct N(u32);
+    struct ParseError;
     impl Name for N {
+        type ParseError = ParseError;
         fn arrow() -> Self {
             N(0)
         }
+        fn parse(s: &str) -> Result<Self, Self::ParseError> {
+            match s.parse::<u32>() {
+                Ok(n) => Ok(N(n)),
+                Err(_) => Err(ParseError),
+            }
+        }
     }
 
-    let ts = TypeSchema::Polytype {
-        variable: 0,
-        body: Box::new(TypeSchema::Monotype(Type::Constructed(
-            N(3),
-            vec![Type::Variable(0)],
-        ))),
-    };
+    with_ctx(1024, |ctx| {
+        let mut src = Source::default();
 
-    let mut ctx = Context::default();
-    let t = ts.instantiate(&mut ctx);
-    ctx.unify(
-        &Type::Constructed(
-            N(3),
-            vec![Type::arrow(
-                Type::Constructed(N(1), vec![]),
-                Type::Constructed(N(2), vec![]),
-            )],
-        ),
-        &t,
-    )
-    .expect("nonstring one side polymorphic");
+        let ts = TypeSchema::Polytype(
+            Variable(0),
+            &TypeSchema::Monotype(&Type::Constructed(&N(3), &[&Type::Variable(Variable(0))])),
+        );
 
-    let mut ctx = Context::default();
-    let t = ts.instantiate(&mut ctx);
-    ctx.unify(
-        &Type::arrow(
-            Type::Constructed(N(1), vec![]),
-            Type::Constructed(N(2), vec![]),
-        ),
-        &t,
-    )
-    .expect_err("nonstring incompatible types");
+        let t = ts.instantiate(&ctx, &mut src);
+        let t_n1 = ctx.intern_name(N(1));
+        let t_n2 = ctx.intern_name(N(2));
+        let t_n3 = ctx.intern_name(N(3));
+        let t_con1 = ctx.intern_tcon(t_n1, &[]);
+        let t_con2 = ctx.intern_tcon(t_n2, &[]);
+        let t_arrow = ctx.arrow(t_con1, t_con2);
+        let t_test = ctx.intern_tcon(t_n3, &[t_arrow]);
+        Type::unify(&[(t_test, t)], &ctx).expect("nonstring one side polymorphic");
+
+        let t = ts.instantiate(&ctx, &mut src);
+        let t_test = ctx.arrow(
+            &Type::Constructed(&N(1), &[]),
+            &Type::Constructed(&N(2), &[]),
+        );
+        Type::unify(&[(t, t_test)], &ctx).expect_err("nonstring incompatible types");
+    })
 }
 
 #[test]
 fn test_merge_no_sacreds() {
-    let mut ctx = Context::default();
-    let a = ctx.new_variable();
-    let b = ctx.new_variable();
-    let _ = ctx.new_variable();
-    ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)]))
-        .unwrap();
+    with_ctx(1024, |ctx| {
+        let mut src = Source::default();
+        let a = src.fresh();
+        let b = src.fresh();
+        let _ = src.fresh();
+        let ta = ctx.intern_tvar(Variable(a));
+        let tb = ctx.intern_tvar(Variable(b));
+        let t1 = ctx.arrow(ta, tb);
+        let t2 = tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, bool)]);
+        let sub1 = Type::unify(&[(t1, t2)], &ctx).unwrap();
 
-    let mut ctx2 = Context::default();
-    let _ = ctx2.new_variable();
-    let pt = ptp!(0, 1; @arrow[tp!(0), tp!(1)]);
-    let mut t = pt.instantiate(&mut ctx2);
-    ctx2.extend(1, tp!(bool));
-    let mut last = ctx2.new_variable();
-    assert_eq!(t.apply(&ctx2).to_string(), "bool → t2");
+        let mut src2 = Source::default();
+        let _ = src2.fresh();
+        let pt = ptp!(ctx, 0, 1; @arrow[tp!(ctx, 0), tp!(ctx, 1)]);
+        let t = pt.instantiate(&ctx, &mut src2);
+        let last = ctx.intern_tvar(Variable(src2.fresh()));
+        let mut sub2 = Substitution::with_capacity(ctx, 32);
+        sub2.add(Variable(2), tp!(ctx, bool));
+        assert_eq!(t.apply(&sub2).to_string(), "t1 → bool");
 
-    let ctx_change = ctx.merge(ctx2, vec![]);
-    ctx_change.reify_type(&mut t);
-    assert_eq!(t.to_string(), "t4 → t5");
-    assert_eq!(t.apply(&ctx).to_string(), "bool → t5");
-    ctx_change.reify_type(&mut last);
-    assert_eq!(last, tp!(6));
-    assert_eq!(ctx.new_variable(), tp!(7));
+        let src_change = src.merge(src2, vec![]);
+        let t_reified = src_change.reify_type(t, &ctx);
+        assert_eq!(t_reified.to_string(), "t4 → t5");
+        src_change.reify_substitution(&mut sub2, &ctx);
+        assert_eq!(t_reified.apply(&sub2).apply(&sub1).to_string(), "t4 → bool");
+        let last_reified = src_change.reify_type(last, &ctx);
+        assert_eq!(last_reified, tp!(ctx, 6));
+        assert_eq!(src.fresh(), 7);
+    })
 }
 
 #[test]
 fn test_merge_with_sacreds() {
-    let mut ctx = Context::default();
-    let a = ctx.new_variable();
-    let b = ctx.new_variable();
-    let _ = ctx.new_variable();
-    ctx.unify(&Type::arrow(a, b), &tp!(@arrow[tp!(int), tp!(bool)]))
-        .unwrap();
+    with_ctx(1024, |ctx| {
+        let mut src = Source::default();
+        let a = src.fresh();
+        let b = src.fresh();
+        let _ = src.fresh();
+        let ta = ctx.intern_tvar(Variable(a));
+        let tb = ctx.intern_tvar(Variable(b));
+        let t1 = ctx.arrow(ta, tb);
+        let t2 = tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, bool)]);
+        let sub1 = Type::unify(&[(t1, t2)], &ctx).unwrap();
 
-    let mut ctx2 = Context::default();
-    let _ = ctx2.new_variable();
-    let pt = ptp!(0, 1; @arrow[tp!(0), tp!(1)]);
-    let mut t = pt.instantiate(&mut ctx2);
-    ctx2.extend(2, tp!(bool));
-    let mut last = ctx2.new_variable();
-    assert_eq!(t.apply(&ctx2).to_string(), "t1 → bool");
+        let mut src2 = Source::default();
+        let _ = src2.fresh();
+        let pt = ptp!(ctx, 0, 1; @arrow[tp!(ctx, 0), tp!(ctx, 1)]);
+        let t = pt.instantiate(&ctx, &mut src2);
+        let last = ctx.intern_tvar(Variable(src2.fresh()));
+        let mut sub2 = Substitution::with_capacity(ctx, 32);
+        sub2.add(Variable(2), tp!(ctx, bool));
+        assert_eq!(t.apply(&sub2).to_string(), "t1 → bool");
 
-    let ctx_change = ctx.merge(ctx2, vec![0, 1]);
-    ctx_change.reify_type(&mut t);
-    assert_eq!(t.to_string(), "t1 → t5");
-    assert_eq!(t.apply(&ctx).to_string(), "bool → bool");
-    ctx_change.reify_type(&mut last);
-    assert_eq!(last, tp!(6));
-    assert_eq!(ctx.new_variable(), tp!(7));
+        let src_change = src.merge(src2, vec![Variable(0), Variable(1)]);
+        let t_reified = src_change.reify_type(t, &ctx);
+        assert_eq!(t_reified.to_string(), "t1 → t5");
+        src_change.reify_substitution(&mut sub2, &ctx);
+        assert_eq!(
+            t_reified.apply(&sub2).apply(&sub1).to_string(),
+            "bool → bool"
+        );
+        let last_reified = src_change.reify_type(last, &ctx);
+        assert_eq!(last_reified, tp!(ctx, 6));
+        assert_eq!(src.fresh(), 7);
+    })
 }
 
 #[cfg(feature = "parser")]
 #[test]
 fn test_parse() {
-    let t = tp!(int);
-    assert_eq!(&t, &Type::parse("int").expect("parse 1"));
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 2"));
+    with_ctx(1024, |ctx| {
+        let t = tp!(ctx, int);
+        assert_eq!(&t, &Type::parse(&ctx, "int").expect("parse 1"));
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 2"));
 
-    let t = tp!(0);
-    assert_eq!(&t, &Type::parse("t0").expect("parse 3"));
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 4"));
+        let t = tp!(ctx, 0);
+        assert_eq!(&t, &Type::parse(&ctx, "t0").expect("parse 3"));
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 4"));
 
-    let t = tp!(@arrow[tp!(int), tp!(int)]);
-    assert_eq!(&t, &Type::parse("int -> int").expect("parse 5"));
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 6"));
+        let t = tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, int)]);
+        assert_eq!(&t, &Type::parse(&ctx, "int -> int").expect("parse 5"));
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 6"));
 
-    let t = tp!(list(tp!(@arrow[tp!(int), tp!(2)])));
-    assert_eq!(&t, &Type::parse("list(int -> t2)").expect("parse 7"));
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 8"));
+        let t = tp!(ctx, list(tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, 2)])));
+        assert_eq!(&t, &Type::parse(&ctx, "list(int -> t2)").expect("parse 7"));
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 8"));
 
-    let t = tp!(hashmap(tp!(str), tp!(@arrow[tp!(int), tp!(0), tp!(bool)])));
-    assert_eq!(
-        &t,
-        &Type::parse("hashmap(str, int -> t0 -> bool)").expect("parse 9")
-    );
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 10"));
+        let t = tp!(
+            ctx,
+            hashmap(
+                tp!(ctx, str),
+                tp!(ctx, @arrow[tp!(ctx, int), tp!(ctx, 0), tp!(ctx, bool)])
+            )
+        );
+        assert_eq!(
+            &t,
+            &Type::parse(&ctx, "hashmap(str, int -> t0 -> bool)").expect("parse 9")
+        );
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 10"));
 
-    let t = tp!(@arrow[
-        tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
-        tp!(1),
-        tp!(list(tp!(0))),
-        tp!(1),
-    ]);
-    assert_eq!(
-        &t,
-        &Type::parse("(t1 → t0 → t1) → t1 → list(t0) → t1").expect("parse 11")
-    );
-    assert_eq!(t, Type::parse(&t.to_string()).expect("parse 12"));
+        let t = tp!(ctx, @arrow[
+            tp!(ctx, @arrow[tp!(ctx, 1), tp!(ctx, 0), tp!(ctx, 1)]),
+            tp!(ctx, 1),
+            tp!(ctx, list(tp!(ctx, 0))),
+            tp!(ctx, 1),
+        ]);
+        assert_eq!(
+            &t,
+            &Type::parse(&ctx, "(t1 → t0 → t1) → t1 → list(t0) → t1").expect("parse 11")
+        );
+        assert_eq!(t, Type::parse(&ctx, &t.to_string()).expect("parse 12"));
+    })
 }

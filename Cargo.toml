@@ -17,8 +17,11 @@ default = ["parser"]
 parser = ["nom"]
 
 [dependencies]
+fnv = "1.0"
 indexmap = "1.0"
 itertools = "0.8"
+smallvec = "1.4"
+typed-arena = "2.0"
 
 [dependencies.nom]
 version = "=4.1.1"
