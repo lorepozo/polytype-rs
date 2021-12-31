@@ -106,6 +106,7 @@ mod parser;
 mod types;
 
 pub use context::{Context, ContextChange, UnificationError};
+#[cfg(feature = "parser")]
 pub use parser::ParseError;
 pub use types::{Type, TypeSchema, Variable};
 
@@ -153,6 +154,7 @@ pub trait Name: Clone + Eq {
     /// with [`show`].
     ///
     /// [`show`]: #method.show
+    #[cfg(feature = "parser")]
     fn parse(_s: &str) -> Result<Self, ParseError> {
         Err(ParseError)
     }
@@ -172,6 +174,7 @@ impl Name for &'static str {
         (*self).to_string()
     }
     /// **LEAKY** because it gives the string a static lifetime.
+    #[cfg(feature = "parser")]
     #[inline(always)]
     fn parse(s: &str) -> Result<&'static str, ParseError> {
         Ok(unsafe { &mut *Box::into_raw(s.to_string().into_boxed_str()) })
