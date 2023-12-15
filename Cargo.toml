@@ -14,13 +14,10 @@ edition = "2018"
 
 [features]
 default = ["parser"]
-parser = ["nom"]
+parser = []
 
 [dependencies]
 indexmap = "1.0"
 itertools = "0.8"
-
-[dependencies.nom]
-version = "=4.1.1"
-optional = true
+winnow = "0.5.28"
 

@@ -1,115 +1,27 @@
-use nom::{alpha, digit, types::CompleteStr};
-use nom::{
-    alt, alt_sep, call_m, do_parse, error_position, expr_res, map, map_res, method, opt, sep,
-    separated_list, tag, wrap_sep, ws,
+use std::fmt::Formatter;
+use std::str::FromStr;
+
+use winnow::{
+    ascii::{alpha1, digit1, multispace0},
+    combinator::{alt, delimited, opt, preceded, separated, separated_pair},
+    prelude::*,
+    Parser,
 };
-
-#[allow(unused_imports)]
-use nom::call; // FIXME see https://github.com/Geal/nom/pull/871
-
-use std::marker::PhantomData;
-use std::num::ParseIntError;
 
 use crate::{Name, Type, TypeSchema};
 
 #[derive(Debug)]
-/// A failed parse.
-pub struct ParseError;
-
+pub struct ParseError(pub(crate) String);
 impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ParseError")
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
-
 impl std::error::Error for ParseError {}
 
-pub fn parse_type<N: Name>(input: &str) -> Result<Type<N>, ParseError> {
-    match Parser::default().monotype(CompleteStr(input)).1 {
-        Ok((_, t)) => Ok(t),
-        _ => Err(ParseError),
-    }
-}
-pub fn parse_typeschema<N: Name>(input: &str) -> Result<TypeSchema<N>, ParseError> {
-    match Parser::default().polytype(CompleteStr(input)).1 {
-        Ok((_, t)) => Ok(t),
-        _ => Err(ParseError),
-    }
-}
+impl<N: Name> FromStr for TypeSchema<N> {
+    type Err = ParseError;
 
-fn nom_usize(inp: CompleteStr<'_>) -> Result<usize, ParseIntError> {
-    inp.parse()
-}
-
-// hack for polymorphism with nom
-pub struct Parser<N: Name>(PhantomData<N>);
-impl<N: Name> Default for Parser<N> {
-    fn default() -> Self {
-        Parser(PhantomData)
-    }
-}
-impl<N: Name> Parser<N> {
-    method!(
-        var<Parser<N>, CompleteStr<'_>, Type<N>>,
-        self,
-        do_parse!(tag!("t") >> num: map_res!(digit, nom_usize) >> (Type::Variable(num)))
-    );
-    method!(
-        constructed_simple<Parser<N>, CompleteStr<'_>, Type<N>>,
-        self,
-        do_parse!(
-            name_raw: alpha
-                >> name: expr_res!(N::parse(&name_raw))
-                >> (Type::Constructed(name, vec![]))
-        )
-    );
-    method!(constructed_complex<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-           do_parse!(
-               name_raw: alpha >>
-               name: expr_res!(N::parse(&name_raw)) >>
-               tag!("(") >>
-               args: separated_list!(tag!(","), ws!(call_m!(self.monotype))) >>
-               tag!(")") >>
-               (Type::Constructed(name, args)))
-    );
-    method!(arrow<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-           do_parse!(
-               alpha: ws!(alt!(call_m!(self.parenthetical) |
-                               call_m!(self.var) |
-                               call_m!(self.constructed_complex) |
-                               call_m!(self.constructed_simple))) >>
-               alt!(tag!("→") | tag!("->")) >>
-               beta: ws!(call_m!(self.monotype)) >>
-               (Type::arrow(alpha, beta)))
-    );
-    method!(parenthetical<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-           do_parse!(
-               tag!("(") >>
-               interior: call_m!(self.arrow) >>
-               tag!(")") >>
-               (interior))
-    );
-    method!(binding<Parser<N>, CompleteStr<'_>, TypeSchema<N>>, mut self,
-           do_parse!(
-               opt!(tag!("∀")) >>
-               tag!("t") >>
-               variable: map_res!(digit, nom_usize) >>
-               ws!(tag!(".")) >>
-               body: map!(call_m!(self.polytype), Box::new) >>
-               (TypeSchema::Polytype{variable, body}))
-    );
-    method!(monotype<Parser<N>, CompleteStr<'_>, Type<N>>, mut self,
-           alt!(call_m!(self.arrow) |
-                call_m!(self.var) |
-                call_m!(self.constructed_complex) |
-                call_m!(self.constructed_simple))
-    );
-    method!(polytype<Parser<N>, CompleteStr<'_>, TypeSchema<N>>, mut self,
-        alt!(call_m!(self.binding) |
-             map!(call_m!(self.monotype), TypeSchema::Monotype))
-    );
-}
-impl<N: Name> TypeSchema<N> {
     /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
     /// This is a **leaky** operation and should be avoided wherever possible:
     /// names of constructed types will remain until program termination.
@@ -120,23 +32,28 @@ impl<N: Name> TypeSchema<N> {
     ///
     /// ```
     /// # use polytype::{ptp, tp, TypeSchema};
-    /// let t_par = TypeSchema::parse("∀t0. t0 -> t0").expect("valid type");
+    /// let t_par: TypeSchema = "∀t0. t0 -> t0".parse().expect("invalid type");
     /// let t_lit = ptp!(0; @arrow[tp!(0), tp!(0)]);
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
-    /// let t: TypeSchema<&'static str> = TypeSchema::parse(s).expect("valid type");
+    /// let t: TypeSchema<&'static str> = s.parse().expect("invalid type");
     /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
     /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn parse(s: &str) -> Result<TypeSchema<N>, ParseError> {
-        parse_typeschema(s)
+    fn from_str(s: &str) -> Result<TypeSchema<N>, ParseError> {
+        parse_polytype
+            .parse(s)
+            .map_err(|e| ParseError(e.to_string()))
     }
 }
-impl<N: Name> Type<N> {
+
+impl<N: Name> FromStr for Type<N> {
+    type Err = ParseError;
+
     /// Parse a type from a string. This round-trips with [`Display`]. This is a
     /// **leaky** operation and should be avoided wherever possible: names of
     /// constructed types will remain until program termination.
@@ -145,7 +62,7 @@ impl<N: Name> Type<N> {
     ///
     /// ```
     /// # use polytype::{tp, Type};
-    /// let t_par = Type::parse("int -> hashmap(str, list(bool))").expect("valid type");
+    /// let t_par: Type = "int -> hashmap(str, list(bool))".parse().expect("valid type");
     /// let t_lit = tp!(@arrow[
     ///     tp!(int),
     ///     tp!(hashmap(
@@ -156,13 +73,95 @@ impl<N: Name> Type<N> {
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "(t1 → t0 → t1) → t1 → list(t0) → t1";
-    /// let t: Type<&'static str> = Type::parse(s).expect("valid type");
+    /// let t: Type<&'static str> = s.parse().expect("valid type");
     /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
-    pub fn parse(s: &str) -> Result<Type<N>, ParseError> {
-        parse_type(s)
+    fn from_str(s: &str) -> Result<Type<N>, ParseError> {
+        parse_monotype
+            .parse(s)
+            .map_err(|e| ParseError(e.to_string()))
     }
+}
+
+fn parse_var<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    preceded('t', digit1)
+        .parse_to()
+        .map(Type::Variable)
+        .parse_next(input)
+}
+fn parse_constructed_simple<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    alpha1
+        .try_map(N::parse)
+        .map(|name| Type::Constructed(name, vec![]))
+        .parse_next(input)
+}
+fn parse_constructed_complex<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    let (name, args) = (
+        alpha1.try_map(N::parse),
+        delimited(
+            '(',
+            separated(
+                0..,
+                delimited(multispace0, parse_monotype, multispace0),
+                ',',
+            ),
+            ')',
+        ),
+    )
+        .parse_next(input)?;
+    Ok(Type::Constructed(name, args))
+}
+
+fn parse_arrow<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    let (alpha, beta) = delimited(
+        multispace0,
+        separated_pair(
+            alt((
+                parse_parenthetical,
+                parse_var,
+                parse_constructed_complex,
+                parse_constructed_simple,
+            )),
+            delimited(multispace0, alt(("→", "->")), multispace0),
+            parse_monotype,
+        ),
+        multispace0,
+    )
+    .parse_next(input)?;
+    Ok(Type::arrow(alpha, beta))
+}
+
+fn parse_parenthetical<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    delimited('(', parse_arrow, ')').parse_next(input)
+}
+
+fn parse_binding<N: Name>(input: &mut &str) -> PResult<TypeSchema<N>> {
+    let (variable, body) = preceded(
+        opt('∀'),
+        separated_pair(
+            preceded('t', digit1).parse_to::<usize>(),
+            delimited(multispace0, '.', multispace0),
+            parse_polytype,
+        ),
+    )
+    .parse_next(input)?;
+    let body = Box::new(body);
+    Ok(TypeSchema::Polytype { variable, body })
+}
+
+fn parse_monotype<N: Name>(input: &mut &str) -> PResult<Type<N>> {
+    alt((
+        parse_arrow,
+        parse_var,
+        parse_constructed_complex,
+        parse_constructed_simple,
+    ))
+    .parse_next(input)
+}
+
+fn parse_polytype<N: Name>(input: &mut &str) -> PResult<TypeSchema<N>> {
+    alt((parse_binding, parse_monotype.map(TypeSchema::Monotype))).parse_next(input)
 }

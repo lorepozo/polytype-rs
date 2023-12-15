@@ -69,6 +69,7 @@ assert_eq!(t2.to_string(), "list(t1)");
 See the [documentation](https://docs.rs/polytype) for more details.
 
 ## Features
-By default `polytype` includes a type parser that can be invoked with `Type::parse`.
+By default `polytype` includes a type parser that can be invoked with
+[str::parse](https://doc.rust-lang.org/stable/std/primitive.str.html#method.parse).
 This can be disabled with `default-features = false`.
 

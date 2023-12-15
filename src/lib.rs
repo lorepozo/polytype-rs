@@ -156,7 +156,7 @@ pub trait Name: Clone + Eq {
     /// [`show`]: #method.show
     #[cfg(feature = "parser")]
     fn parse(_s: &str) -> Result<Self, ParseError> {
-        Err(ParseError)
+        Err(ParseError("not implemented".to_owned()))
     }
 
     fn is_arrow(&self) -> bool {
