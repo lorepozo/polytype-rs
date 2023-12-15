@@ -3,10 +3,10 @@
 //! For brevity, the documentation heavily uses the two provided macros when
 //! creating types.
 //!
-//! A [`TypeSchema`] is a type that may have universally quantified type
+//! A [`TypeScheme`] is a type that may have universally quantified type
 //! variables. A [`Context`] keeps track of assignments made to type variables
 //! so that you may manipulate [`Type`]s, which are unquantified and concrete.
-//! Hence a `TypeSchema` can be instantiated, using [`TypeSchema::instantiate`],
+//! Hence a `TypeScheme` can be instantiated, using [`TypeScheme::instantiate`],
 //! into a `Context` in order to produce a corresponding `Type`. Two `Type`s
 //! under a particular `Context` can be unified using [`Context::unify`], which
 //! may record new type variable assignments in the `Context`.
@@ -25,10 +25,10 @@
 //!     tp!(list(tp!(0))),
 //! ]);
 //!
-//! // Quantified type schemas provide polymorphic behavior.
+//! // Quantified type schemes provide polymorphic behavior.
 //! assert_eq!(t.to_string(), "∀t0. (t0 → bool) → list(t0) → list(t0)");
 //!
-//! // We can instantiate type schemas to remove quantifiers
+//! // We can instantiate type schemes to remove quantifiers
 //! let mut ctx = Context::default();
 //! let t = t.instantiate(&mut ctx);
 //! assert_eq!(t.to_string(), "(t0 → bool) → list(t0) → list(t0)");
@@ -45,7 +45,7 @@
 //! use polytype::{ptp, tp, Context};
 //!
 //! // reduce: ∀α. ∀β. (β → α → β) → β → [α] → β
-//! // We can represent the type schema of reduce using the included macros:
+//! // We can represent the type scheme of reduce using the included macros:
 //! let t = ptp!(0, 1; @arrow[
 //!     tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
 //!     tp!(1),
@@ -63,7 +63,7 @@
 //! let tplus = tp!(@arrow[tp!(int), tp!(int), tp!(int)]);
 //! assert_eq!(tplus.to_string(), "int → int → int");
 //!
-//! // We instantiate the type schema of reduce within our context
+//! // We instantiate the type scheme of reduce within our context
 //! // so new type variables will be distinct
 //! let t = t.instantiate(&mut ctx);
 //! assert_eq!(t.to_string(), "(t1 → t0 → t1) → t1 → list(t0) → t1");
@@ -95,8 +95,8 @@
 //! [`Context`]: struct.Context.html
 //! [`Context::unify`]: struct.Context.html#method.unify
 //! [`Type`]: enum.Type.html
-//! [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
-//! [`TypeSchema`]: enum.TypeSchema.html
+//! [`TypeScheme::instantiate`]: enum.TypeScheme.html#method.instantiate
+//! [`TypeScheme`]: enum.TypeScheme.html
 //! [Hindley-Milner polymorphic typing system]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system
 
 mod context;
@@ -108,7 +108,7 @@ mod types;
 pub use context::{Context, ContextChange, UnificationError};
 #[cfg(feature = "parser")]
 pub use parser::ParseError;
-pub use types::{Type, TypeSchema, Variable};
+pub use types::{Type, TypeScheme, Variable};
 
 /// Types require a `Name` for comparison.
 ///
@@ -208,12 +208,12 @@ impl Name for &'static str {
 /// A more complex case builds a new type given typed items.
 ///
 /// ```
-/// use polytype::{ptp, tp, Context, Infer, Type, TypeSchema, UnificationError};
+/// use polytype::{ptp, tp, Context, Infer, Type, TypeScheme, UnificationError};
 /// use std::cell::RefCell;
 ///
 /// type MyCtx = RefCell<Context>; // the RefCell allows us to mutate the context during inference
 ///
-/// struct Primitive(TypeSchema);
+/// struct Primitive(TypeScheme);
 /// impl Infer<MyCtx> for Primitive {
 ///     fn infer(&self, ctx: &MyCtx) -> Result<Type, UnificationError> {
 ///         Ok(self.0.instantiate(&mut ctx.borrow_mut()))
@@ -245,7 +245,7 @@ impl Name for &'static str {
 /// A more sophisticated case has the types maintained externally:
 ///
 /// ```
-/// use polytype::{ptp, tp, Context, Infer, Type, TypeSchema, UnificationError};
+/// use polytype::{ptp, tp, Context, Infer, Type, TypeScheme, UnificationError};
 /// use std::{cell::RefCell, collections::HashMap};
 ///
 /// // in this example, every Term has a Type defined through the Lexicon
@@ -255,7 +255,7 @@ impl Name for &'static str {
 /// }
 /// struct Lexicon {
 ///     ctx: RefCell<Context>,
-///     ops: HashMap<u32, TypeSchema>,
+///     ops: HashMap<u32, TypeScheme>,
 ///     global_vars: RefCell<HashMap<u32, Type>>,
 /// }
 ///

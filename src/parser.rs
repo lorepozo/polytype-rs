@@ -8,7 +8,7 @@ use winnow::{
     Parser,
 };
 
-use crate::{Name, Type, TypeSchema};
+use crate::{Name, Type, TypeScheme};
 
 #[derive(Debug)]
 pub struct ParseError(pub(crate) String);
@@ -19,10 +19,10 @@ impl std::fmt::Display for ParseError {
 }
 impl std::error::Error for ParseError {}
 
-impl<N: Name> FromStr for TypeSchema<N> {
+impl<N: Name> FromStr for TypeScheme<N> {
     type Err = ParseError;
 
-    /// Parse a [`TypeSchema`] from a string. This round-trips with [`Display`].
+    /// Parse a [`TypeScheme`] from a string. This round-trips with [`Display`].
     /// This is a **leaky** operation and should be avoided wherever possible:
     /// names of constructed types will remain until program termination.
     ///
@@ -31,20 +31,20 @@ impl<N: Name> FromStr for TypeSchema<N> {
     /// # Examples
     ///
     /// ```
-    /// # use polytype::{ptp, tp, TypeSchema};
-    /// let t_par: TypeSchema = "∀t0. t0 -> t0".parse().expect("invalid type");
+    /// # use polytype::{ptp, tp, TypeScheme};
+    /// let t_par: TypeScheme = "∀t0. t0 -> t0".parse().expect("invalid type");
     /// let t_lit = ptp!(0; @arrow[tp!(0), tp!(0)]);
     /// assert_eq!(t_par, t_lit);
     ///
     /// let s = "∀t0. ∀t1. (t1 → t0 → t1) → t1 → list(t0) → t1";
-    /// let t: TypeSchema<&'static str> = s.parse().expect("invalid type");
+    /// let t: TypeScheme<&'static str> = s.parse().expect("invalid type");
     /// let round_trip = t.to_string();
     /// assert_eq!(s, round_trip);
     /// ```
     ///
     /// [`Display`]: https://doc.rust-lang.org/std/fmt/trait.Display.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    fn from_str(s: &str) -> Result<TypeSchema<N>, ParseError> {
+    /// [`TypeScheme`]: enum.TypeScheme.html
+    fn from_str(s: &str) -> Result<TypeScheme<N>, ParseError> {
         parse_polytype
             .parse(s)
             .map_err(|e| ParseError(e.to_string()))
@@ -138,7 +138,7 @@ fn parse_parenthetical<N: Name>(input: &mut &str) -> PResult<Type<N>> {
     delimited('(', parse_arrow, ')').parse_next(input)
 }
 
-fn parse_binding<N: Name>(input: &mut &str) -> PResult<TypeSchema<N>> {
+fn parse_binding<N: Name>(input: &mut &str) -> PResult<TypeScheme<N>> {
     let (variable, body) = preceded(
         opt('∀'),
         separated_pair(
@@ -149,7 +149,7 @@ fn parse_binding<N: Name>(input: &mut &str) -> PResult<TypeSchema<N>> {
     )
     .parse_next(input)?;
     let body = Box::new(body);
-    Ok(TypeSchema::Polytype { variable, body })
+    Ok(TypeScheme::Polytype { variable, body })
 }
 
 fn parse_monotype<N: Name>(input: &mut &str) -> PResult<Type<N>> {
@@ -162,6 +162,6 @@ fn parse_monotype<N: Name>(input: &mut &str) -> PResult<Type<N>> {
     .parse_next(input)
 }
 
-fn parse_polytype<N: Name>(input: &mut &str) -> PResult<TypeSchema<N>> {
-    alt((parse_binding, parse_monotype.map(TypeSchema::Monotype))).parse_next(input)
+fn parse_polytype<N: Name>(input: &mut &str) -> PResult<TypeScheme<N>> {
+    alt((parse_binding, parse_monotype.map(TypeScheme::Monotype))).parse_next(input)
 }

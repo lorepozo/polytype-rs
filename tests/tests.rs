@@ -84,27 +84,27 @@ fn test_tp_macro() {
 fn test_ptp_macro() {
     assert_eq!(
         ptp!(bool),
-        TypeSchema::Monotype(Type::Constructed("bool", vec![]))
+        TypeScheme::Monotype(Type::Constructed("bool", vec![]))
     );
     assert_eq!(
         ptp!(list(tp!(bool))),
-        TypeSchema::Monotype(Type::Constructed(
+        TypeScheme::Monotype(Type::Constructed(
             "list",
             vec![Type::Constructed("bool", vec![])],
         ))
     );
     assert_eq!(
         ptp!(0; 0),
-        TypeSchema::Polytype {
+        TypeScheme::Polytype {
             variable: 0,
-            body: Box::new(TypeSchema::Monotype(Type::Variable(0))),
+            body: Box::new(TypeScheme::Monotype(Type::Variable(0))),
         }
     );
     assert_eq!(
         ptp!(0; @arrow[tp!(0), tp!(0)]),
-        TypeSchema::Polytype {
+        TypeScheme::Polytype {
             variable: 0,
-            body: Box::new(TypeSchema::Monotype(Type::Constructed(
+            body: Box::new(TypeScheme::Monotype(Type::Constructed(
                 "→",
                 vec![Type::Variable(0), Type::Variable(0)],
             ))),
@@ -245,9 +245,9 @@ fn test_unify_nonstring_name() {
         }
     }
 
-    let ts = TypeSchema::Polytype {
+    let ts = TypeScheme::Polytype {
         variable: 0,
-        body: Box::new(TypeSchema::Monotype(Type::Constructed(
+        body: Box::new(TypeScheme::Monotype(Type::Constructed(
             N(3),
             vec![Type::Variable(0)],
         ))),

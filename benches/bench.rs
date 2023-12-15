@@ -9,13 +9,13 @@ use test::Bencher;
 fn instantiate_unify_apply(b: &mut Bencher) {
     b.iter(|| {
         let mut ctx = Context::default();
-        let schema = ptp!(0, 1; @arrow[
+        let scheme = ptp!(0, 1; @arrow[
             tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
             tp!(1),
             tp!(list(tp!(0))),
             tp!(1),
         ]);
-        let t = schema.instantiate(&mut ctx);
+        let t = scheme.instantiate(&mut ctx);
         let target = tp!(@arrow[
             tp!(@arrow[tp!(int), tp!(obj), tp!(int)]),
             ctx.new_variable(),
@@ -31,13 +31,13 @@ fn instantiate_unify_apply(b: &mut Bencher) {
 fn instantiate_unify_apply_fast(b: &mut Bencher) {
     b.iter(|| {
         let mut ctx = Context::default();
-        let schema = ptp!(0, 1; @arrow[
+        let scheme = ptp!(0, 1; @arrow[
             tp!(@arrow[tp!(1), tp!(0), tp!(1)]),
             tp!(1),
             tp!(list(tp!(0))),
             tp!(1),
         ]);
-        let mut t = schema.instantiate_owned(&mut ctx);
+        let mut t = scheme.instantiate_owned(&mut ctx);
         let target = tp!(@arrow[
             tp!(@arrow[tp!(int), tp!(obj), tp!(int)]),
             ctx.new_variable(),

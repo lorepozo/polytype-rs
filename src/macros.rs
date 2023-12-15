@@ -112,38 +112,38 @@ macro_rules! tp {
     (@arrow[$x:expr, $($xs:expr,)*]) => ($crate::tp!(@arrow[$x, $($xs),*]))
 }
 
-/// Creates a [`TypeSchema`][] (convenience for common patterns).
+/// Creates a [`TypeScheme`][] (convenience for common patterns).
 ///
-/// Specifically, a `TypeSchema<&'static str>`, where all names are static strings.
+/// Specifically, a `TypeScheme<&'static str>`, where all names are static strings.
 ///
 /// ```rust,ignore
 /// // Equivalent to:
-/// TypeSchema::Monotype(tp)
+/// TypeScheme::Monotype(tp)
 /// // Or
-/// TypeSchema::Polytype {
+/// TypeScheme::Polytype {
 ///     variable1,
-///     body: Box::new(TypeSchema::Polytype {
+///     body: Box::new(TypeScheme::Polytype {
 ///         variable2,
 ///         body: ...
 ///     })
 /// }
 /// ```
 ///
-/// This behaves much like [`tp!`], but this gives a [`TypeSchema`] and you can
+/// This behaves much like [`tp!`], but this gives a [`TypeScheme`] and you can
 /// express quantified type variables in a prefixed comma-delimited list. There
 /// are three usage patterns, shown in the examples below.
 ///
 /// # Examples
 ///
 /// If you don't want to do any quantification, using `ptp!` on its own is just
-/// like wrapping [`tp!`] with a [`TypeSchema::Monotype`]:
+/// like wrapping [`tp!`] with a [`TypeScheme::Monotype`]:
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
+/// # use polytype::{ptp, tp, Type, TypeScheme};
 /// let t = ptp!(dict(tp!(str), tp!(int)));
 /// assert_eq!(format!("{}", t), "dict(str,int)");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Monotype(
+/// let t_eq = TypeScheme::Monotype(
 ///     Type::Constructed("dict", vec![
 ///         Type::Constructed("str", vec![]),
 ///         Type::Constructed("int", vec![]),
@@ -157,15 +157,15 @@ macro_rules! tp {
 /// subsequent monotype is treated like the [`tp!`] macro):
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
+/// # use polytype::{ptp, tp, Type, TypeScheme};
 /// let t = ptp!(0, 1; @arrow[tp!(0), tp!(1), tp!(0)]);
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Polytype {
+/// let t_eq = TypeScheme::Polytype {
 ///     variable: 0,
-///     body: Box::new(TypeSchema::Polytype {
+///     body: Box::new(TypeScheme::Polytype {
 ///         variable: 1,
-///         body: Box::new(TypeSchema::Monotype(
+///         body: Box::new(TypeScheme::Monotype(
 ///             Type::arrow(
 ///                 Type::Variable(0),
 ///                 Type::arrow(
@@ -179,51 +179,51 @@ macro_rules! tp {
 /// assert_eq!(t, t_eq);
 /// ```
 ///
-/// If you want want do quantification over an existing [`TypeSchema`], use a
+/// If you want want do quantification over an existing [`TypeScheme`], use a
 /// comma after the quantified variables:
 ///
 /// ```
-/// # use polytype::{ptp, tp, Type, TypeSchema};
+/// # use polytype::{ptp, tp, Type, TypeScheme};
 /// let inner = tp!(@arrow[tp!(0), tp!(1), tp!(0)]);
-/// let t = ptp!(0, 1, TypeSchema::Monotype(inner.clone()));
+/// let t = ptp!(0, 1, TypeScheme::Monotype(inner.clone()));
 /// assert_eq!(format!("{}", t), "∀t0. ∀t1. t0 → t1 → t0");
 /// // Equivalent to:
-/// let t_eq = TypeSchema::Polytype {
+/// let t_eq = TypeScheme::Polytype {
 ///     variable: 0,
-///     body: Box::new(TypeSchema::Polytype {
+///     body: Box::new(TypeScheme::Polytype {
 ///         variable: 1,
-///         body: Box::new(TypeSchema::Monotype(inner))
+///         body: Box::new(TypeScheme::Monotype(inner))
 ///     })
 /// };
 /// assert_eq!(t, t_eq);
 /// ```
 ///
-/// [`TypeSchema::Polytype`]: enum.TypeSchema.html#variant.Polytype
-/// [`TypeSchema::Monotype`]: enum.TypeSchema.html#variant.Monotype
-/// [`TypeSchema`]: enum.TypeSchema.html
+/// [`TypeScheme::Polytype`]: enum.TypeScheme.html#variant.Polytype
+/// [`TypeScheme::Monotype`]: enum.TypeScheme.html#variant.Monotype
+/// [`TypeScheme`]: enum.TypeScheme.html
 /// [`Type`]: enum.Type.html
 /// [`tp!`]: macro.tp.html
 #[macro_export]
 macro_rules! ptp {
     ($n:expr; $($t:tt)+) => {
-        $crate::TypeSchema::Polytype {
+        $crate::TypeScheme::Polytype {
             variable: $n,
-            body: Box::new($crate::TypeSchema::Monotype($crate::tp!($($t)+))),
+            body: Box::new($crate::TypeScheme::Monotype($crate::tp!($($t)+))),
         }
     };
     ($n:expr, $body:expr) => {
-        $crate::TypeSchema::Polytype {
+        $crate::TypeScheme::Polytype {
             variable: $n,
             body: Box::new($body),
         }
     };
     ($n:expr, $($t:tt)+) => {
-        $crate::TypeSchema::Polytype {
+        $crate::TypeScheme::Polytype {
             variable: $n,
             body: Box::new($crate::ptp!($($t)+)),
         }
     };
     ($($t:tt)+) => {
-        $crate::TypeSchema::Monotype($crate::tp!($($t)+))
+        $crate::TypeScheme::Monotype($crate::tp!($($t)+))
     };
 }

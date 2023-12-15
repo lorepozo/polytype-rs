@@ -1,4 +1,4 @@
-use crate::{Name, Type, TypeSchema, Variable};
+use crate::{Name, Type, TypeScheme, Variable};
 use indexmap::IndexMap;
 use std::{cell::RefCell, collections::HashMap, error, fmt};
 
@@ -322,9 +322,9 @@ impl<N: Name> Context<N> {
     }
     /// Merge two type contexts.
     ///
-    /// Every [`Type`] ([`TypeSchema`]) that corresponds to the `other` context
+    /// Every [`Type`] ([`TypeScheme`]) that corresponds to the `other` context
     /// must be reified using [`ContextChange::reify_type`]
-    /// ([`ContextChange::reify_typeschema`]). Any [`Variable`] in `sacreds`
+    /// ([`ContextChange::reify_typescheme`]). Any [`Variable`] in `sacreds`
     /// will not be changed by the context (i.e. reification will ignore it).
     ///
     /// # Examples
@@ -385,10 +385,10 @@ impl<N: Name> Context<N> {
     /// assert_eq!(ctx.new_variable(), tp!(4));
     /// ```
     /// [`ContextChange::reify_type`]: struct.ContextChange.html#method.reify_type
-    /// [`ContextChange::reify_typeschema`]: struct.ContextChange.html#method.reify_typeschema
+    /// [`ContextChange::reify_typescheme`]: struct.ContextChange.html#method.reify_typescheme
     /// [`Type`]: enum.Type.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    /// [`Variable`]: type.TypeSchema.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
+    /// [`Variable`]: type.TypeScheme.html
     pub fn merge(&mut self, other: Context<N>, sacreds: Vec<Variable>) -> ContextChange {
         let delta = self.next;
         for (v, tp) in other.substitution {
@@ -423,16 +423,16 @@ impl ContextChange {
             Type::Variable(n) => *n += self.delta,
         }
     }
-    /// Reify a [`TypeSchema`] for use under a merged [`Context`].
+    /// Reify a [`TypeScheme`] for use under a merged [`Context`].
     ///
-    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
     /// [`Context`]: struct.Context.html
-    pub fn reify_typeschema(&self, tpsc: &mut TypeSchema) {
+    pub fn reify_typescheme(&self, tpsc: &mut TypeScheme) {
         match tpsc {
-            TypeSchema::Monotype(tp) => self.reify_type(tp),
-            TypeSchema::Polytype { variable, body } => {
+            TypeScheme::Monotype(tp) => self.reify_type(tp),
+            TypeScheme::Polytype { variable, body } => {
                 *variable += self.delta;
-                self.reify_typeschema(body);
+                self.reify_typescheme(body);
             }
         }
     }

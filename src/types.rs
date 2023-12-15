@@ -11,14 +11,14 @@ pub type Variable = usize;
 
 /// Represents [polytypes][1] (uninstantiated, universally quantified types).
 ///
-/// The primary ways of creating a `TypeSchema` are with the [`ptp!`] macro or
+/// The primary ways of creating a `TypeScheme` are with the [`ptp!`] macro or
 /// with [`Type::generalize`].
 ///
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Polytype
 /// [`ptp!`]: macro.ptp.html
 /// [`Type::generalize`]: enum.Type.html#method.generalize
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum TypeSchema<N: Name = &'static str> {
+pub enum TypeScheme<N: Name = &'static str> {
     /// Non-polymorphic types (e.g. `α → β`, `int → bool`)
     Monotype(Type<N>),
     /// Polymorphic types (e.g. `∀α. α → α`, `∀α. ∀β. α → β`)
@@ -28,10 +28,10 @@ pub enum TypeSchema<N: Name = &'static str> {
         /// [`Variable`]: type.Variable.html
         variable: Variable,
         /// The type in which `variable` is bound
-        body: Box<TypeSchema<N>>,
+        body: Box<TypeScheme<N>>,
     },
 }
-impl<N: Name> TypeSchema<N> {
+impl<N: Name> TypeScheme<N> {
     /// Checks whether a variable is bound in the quantification of a polytype.
     ///
     /// # Examples
@@ -44,12 +44,12 @@ impl<N: Name> TypeSchema<N> {
     /// ```
     pub fn is_bound(&self, v: Variable) -> bool {
         match *self {
-            TypeSchema::Monotype(_) => false,
-            TypeSchema::Polytype { variable, .. } if variable == v => true,
-            TypeSchema::Polytype { ref body, .. } => body.is_bound(v),
+            TypeScheme::Monotype(_) => false,
+            TypeScheme::Polytype { variable, .. } if variable == v => true,
+            TypeScheme::Polytype { ref body, .. } => body.is_bound(v),
         }
     }
-    /// Returns a set of each [`Variable`] bound by the [`TypeSchema`].
+    /// Returns a set of each [`Variable`] bound by the [`TypeScheme`].
     ///
     /// # Examples
     ///
@@ -60,17 +60,17 @@ impl<N: Name> TypeSchema<N> {
     /// ```
     ///
     /// [`Variable`]: type.Variable.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
     pub fn bound_vars(&self) -> Vec<Variable> {
         let mut t = self;
         let mut bvs = Vec::new();
-        while let TypeSchema::Polytype { variable, ref body } = *t {
+        while let TypeScheme::Polytype { variable, ref body } = *t {
             bvs.push(variable);
             t = body
         }
         bvs
     }
-    /// Returns a set of each free [`Variable`] in the [`TypeSchema`].
+    /// Returns a set of each free [`Variable`] in the [`TypeScheme`].
     ///
     /// # Examples
     ///
@@ -82,7 +82,7 @@ impl<N: Name> TypeSchema<N> {
     /// assert_eq!(free, vec![2, 3]);
     /// ```
     /// [`Variable`]: type.Variable.html
-    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
     pub fn free_vars(&self) -> Vec<Variable> {
         let mut vars = vec![];
         self.free_vars_internal(&mut vars);
@@ -92,14 +92,14 @@ impl<N: Name> TypeSchema<N> {
     }
     fn free_vars_internal(&self, vars: &mut Vec<Variable>) {
         match *self {
-            TypeSchema::Monotype(ref t) => t.vars_internal(vars),
-            TypeSchema::Polytype { variable, ref body } => {
+            TypeScheme::Monotype(ref t) => t.vars_internal(vars),
+            TypeScheme::Polytype { variable, ref body } => {
                 body.free_vars_internal(vars);
                 *vars = vars.iter().filter(|&v| v != &variable).cloned().collect();
             }
         }
     }
-    /// Instantiate a [`TypeSchema`] in the context by removing quantifiers.
+    /// Instantiate a [`TypeScheme`] in the context by removing quantifiers.
     ///
     /// All type variables will be replaced with fresh type variables.
     ///
@@ -118,7 +118,7 @@ impl<N: Name> TypeSchema<N> {
     /// assert_eq!(t2.to_string(), "list(t1)");
     /// ```
     ///
-    /// [`TypeSchema`]: enum.TypeSchema.html
+    /// [`TypeScheme`]: enum.TypeScheme.html
     pub fn instantiate(&self, ctx: &mut Context<N>) -> Type<N> {
         self.instantiate_internal(ctx, &mut HashMap::new())
     }
@@ -128,8 +128,8 @@ impl<N: Name> TypeSchema<N> {
         substitution: &mut HashMap<Variable, Type<N>>,
     ) -> Type<N> {
         match *self {
-            TypeSchema::Monotype(ref t) => t.substitute(substitution),
-            TypeSchema::Polytype { variable, ref body } => {
+            TypeScheme::Monotype(ref t) => t.substitute(substitution),
+            TypeScheme::Polytype { variable, ref body } => {
                 substitution.insert(variable, ctx.new_variable());
                 body.instantiate_internal(ctx, substitution)
             }
@@ -147,22 +147,22 @@ impl<N: Name> TypeSchema<N> {
         substitution: &mut HashMap<Variable, Type<N>>,
     ) -> Type<N> {
         match self {
-            TypeSchema::Monotype(mut t) => {
+            TypeScheme::Monotype(mut t) => {
                 t.substitute_mut(substitution);
                 t
             }
-            TypeSchema::Polytype { variable, body } => {
+            TypeScheme::Polytype { variable, body } => {
                 substitution.insert(variable, ctx.new_variable());
                 body.instantiate_owned_internal(ctx, substitution)
             }
         }
     }
 }
-impl<N: Name> fmt::Display for TypeSchema<N> {
+impl<N: Name> fmt::Display for TypeScheme<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            TypeSchema::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
-            TypeSchema::Monotype(ref t) => t.fmt(f),
+            TypeScheme::Polytype { variable, ref body } => write!(f, "∀t{}. {}", variable, body),
+            TypeScheme::Monotype(ref t) => t.fmt(f),
         }
     }
 }
@@ -170,12 +170,12 @@ impl<N: Name> fmt::Display for TypeSchema<N> {
 /// Represents [monotypes][1] (fully instantiated, unquantified types).
 ///
 /// The primary ways to create a `Type` are with either the [`tp!`] macro or
-/// [`TypeSchema::instantiate`]. [`Type::arrow`] constructs function types (i.e.  `α → β`), as does
+/// [`TypeScheme::instantiate`]. [`Type::arrow`] constructs function types (i.e.  `α → β`), as does
 /// conversion (`Type::from`) with `Vec` and `VecDeque` for curried arrows.
 ///
 /// [`tp!`]: macro.tp.html
-/// [`TypeSchema::instantiate`]: enum.TypeSchema.html#method.instantiate
-/// [`Type::arrow`]: enum.TypeSchema.html#method.instantiate
+/// [`TypeScheme::instantiate`]: enum.TypeScheme.html#method.instantiate
+/// [`Type::arrow`]: enum.TypeScheme.html#method.instantiate
 /// [1]: https://en.wikipedia.org/wiki/Hindley–Milner_type_system#Monotypes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type<N: Name = &'static str> {
@@ -474,7 +474,7 @@ impl<N: Name> Type<N> {
             }
         }
     }
-    /// Generalizes the type by quantifying over free variables in a [`TypeSchema`].
+    /// Generalizes the type by quantifying over free variables in a [`TypeScheme`].
     ///
     /// Variables specified by `bound` remain unquantified.
     ///
@@ -495,16 +495,16 @@ impl<N: Name> Type<N> {
     /// assert_eq!(t_gen.to_string(), "int → t1");
     /// ```
     ///
-    /// [`TypeSchema`]: enum.TypeSchema.html
-    pub fn generalize(&self, bound: &[Variable]) -> TypeSchema<N> {
+    /// [`TypeScheme`]: enum.TypeScheme.html
+    pub fn generalize(&self, bound: &[Variable]) -> TypeScheme<N> {
         let fvs = self
             .vars()
             .into_iter()
             .filter(|x| !bound.contains(x))
             .collect::<Vec<Variable>>();
-        let mut t = TypeSchema::Monotype(self.clone());
+        let mut t = TypeScheme::Monotype(self.clone());
         for v in fvs {
-            t = TypeSchema::Polytype {
+            t = TypeScheme::Polytype {
                 variable: v,
                 body: Box::new(t),
             };

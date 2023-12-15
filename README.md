@@ -15,13 +15,13 @@ polytype = "6.2"
 ```
 
 **`polytype`** provides the
-[`TypeSchema`](https://docs.rs/polytype/~6/polytype/enum.TypeSchema.html) and
+[`TypeScheme`](https://docs.rs/polytype/~6/polytype/enum.TypeScheme.html) and
 [`Type`](https://docs.rs/polytype/~6/polytype/enum.Type.html) enums, the
 [`Context`](https://docs.rs/polytype/~6/polytype/struct.Context.html)
 struct, and the
 [`tp!`](https://docs.rs/polytype/~6/polytype/macro.tp.html) and
 [`ptp!`](https://docs.rs/polytype/~6/polytype/macro.ptp.html) macros which
-help to concisely create types and type schemas.
+help to concisely create types and type schemes.
 
 Unification:
 
@@ -51,17 +51,17 @@ let t = t.apply(&ctx);
 assert_eq!(t.to_string(), "list(int)");
 ```
 
-Instantiate a `TypeSchema`:
+Instantiate a `TypeScheme`:
 
 ```rust
 let mut ctx = Context::default();
 
 // ∀α. list(α)
-let schema = ptp!(3; tp!(list(tp!(3))));
+let scheme = ptp!(3; tp!(list(tp!(3))));
 
 // They instantiate to new fresh type variables
-let t1 = schema.instantiate(&mut ctx);
-let t2 = schema.instantiate(&mut ctx);
+let t1 = scheme.instantiate(&mut ctx);
+let t2 = scheme.instantiate(&mut ctx);
 assert_eq!(t1.to_string(), "list(t0)");
 assert_eq!(t2.to_string(), "list(t1)");
 ```
