@@ -4,6 +4,12 @@ use std::str::FromStr;
 use polytype::*;
 
 #[test]
+fn test_context_is_send() {
+    let context: Context<&'static str> = Context::default();
+    let _: &(dyn Send + Sync) = &context;
+}
+
+#[test]
 fn test_tp_macro() {
     assert_eq!(tp!(bool), Type::Constructed("bool", vec![]));
     assert_eq!(

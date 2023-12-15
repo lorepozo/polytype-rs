@@ -1,6 +1,7 @@
 use crate::{Name, Type, TypeScheme, Variable};
 use indexmap::IndexMap;
-use std::{cell::RefCell, collections::HashMap, error, fmt};
+use parking_lot::RwLock;
+use std::{collections::HashMap, error, fmt, sync::Arc};
 
 /// Errors during unification.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,7 +35,7 @@ impl<N: Name + fmt::Debug> error::Error for UnificationError<N> {
 /// Contexts track substitutions and generate fresh type variables.
 ///
 /// [`Type`]: enum.Type.html
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Context<N: Name = &'static str> {
     /// A set of constraints mapping from [`Variable`]s to [`Type`]s.
     ///
@@ -57,11 +58,14 @@ pub struct Context<N: Name = &'static str> {
     /// Rather than updating the actual mappings, `Context` maintains this cache
     /// of compressed mappings.
     ///
+    /// This is managed internally by polytype, and should never result in a (b)locking operation or
+    /// a panic.
+    ///
     /// [Union-Find data structure]: https://en.wikipedia.org/wiki/Disjoint-set_data_structure
     /// [`Type`]: enum.Type.html
     /// [`apply`]: enum.Type.html#method.apply
     /// [`apply_mut`]: enum.Type.html#method.apply_mut
-    pub(crate) path_compression_cache: RefCell<HashMap<Variable, Type<N>>>,
+    pub(crate) path_compression_cache: Arc<RwLock<HashMap<Variable, Type<N>>>>,
     /// A counter used to generate fresh [`Variable`]s
     ///
     /// [`Variable`]: type.Variable.html
@@ -71,11 +75,17 @@ impl<N: Name> Default for Context<N> {
     fn default() -> Self {
         Context {
             substitution: IndexMap::new(),
-            path_compression_cache: RefCell::new(HashMap::new()),
+            path_compression_cache: Default::default(),
             next: 0,
         }
     }
 }
+impl<N: Name> PartialEq for Context<N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.substitution.eq(&other.substitution) && self.next == other.next
+    }
+}
+impl<N: Name> Eq for Context<N> {}
 impl<N: Name> Context<N> {
     /// The substitution managed by the context.
     pub fn substitution(&self) -> &IndexMap<Variable, Type<N>> {
@@ -115,11 +125,11 @@ impl<N: Name> Context<N> {
     /// ```
     pub fn clean(&mut self) {
         self.substitution.clear();
-        self.path_compression_cache.get_mut().clear();
+        self.path_compression_cache.write().clear();
     }
     /// Removes previous substitutions added to the `Context` until there are only `n` remaining.
     pub fn rollback(&mut self, n: usize) {
-        self.path_compression_cache.get_mut().clear();
+        self.path_compression_cache.write().clear();
         if n == 0 {
             self.substitution.clear();
         } else {

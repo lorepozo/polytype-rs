@@ -427,17 +427,17 @@ impl<N: Name> Type<N> {
             Type::Variable(v) => {
                 let maybe_tp = ctx
                     .path_compression_cache
-                    .borrow()
+                    .read()
                     .get(&v)
                     .or_else(|| ctx.substitution.get(&v))
                     .cloned();
                 maybe_tp
                     .map(|mut tp| {
                         tp.apply_mut(ctx);
-                        if ctx.path_compression_cache.borrow().get(&v) != Some(&tp) {
-                            ctx.path_compression_cache
-                                .borrow_mut()
-                                .insert(v, tp.clone());
+                        let mut cache = ctx.path_compression_cache.write();
+                        let is_hit = cache.get(&v) == Some(&tp);
+                        if !is_hit {
+                            cache.insert(v, tp.clone());
                         }
                         tp
                     })
@@ -458,16 +458,14 @@ impl<N: Name> Type<N> {
             Type::Variable(v) => {
                 let maybe_tp = ctx
                     .path_compression_cache
-                    .borrow()
+                    .read()
                     .get(&v)
                     .or_else(|| ctx.substitution.get(&v))
                     .cloned();
                 *self = maybe_tp
                     .map(|mut tp| {
                         tp.apply_mut(ctx);
-                        ctx.path_compression_cache
-                            .borrow_mut()
-                            .insert(v, tp.clone());
+                        ctx.path_compression_cache.write().insert(v, tp.clone());
                         tp
                     })
                     .unwrap_or_else(|| self.clone());
