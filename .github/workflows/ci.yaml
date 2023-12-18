@@ -1,0 +1,43 @@
+name: CI
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: cargo fmt --check
+      - run: cargo clippy --lib --tests -- -D warnings
+      - run: cargo doc --verbose
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update nightly && rustup default nightly && rustup component add clippy
+      - run: cargo clippy --benches -- -D warnings
+      - run: cargo bench --verbose
+  coverage:
+    runs-on: ubuntu-latest
+    container:
+      image: xd009642/tarpaulin:develop-nightly
+      options: --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo tarpaulin --lib --tests --doc --verbose --out xml
+      - uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: true
